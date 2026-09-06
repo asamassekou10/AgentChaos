@@ -47,18 +47,63 @@ export const PolicySchema = z
   })
   .strict();
 
+/**
+ * A real MCP server to proxy in front of.
+ *
+ * Optional. Without it AgentChaos serves only simulated tools; with it the
+ * agent reaches the real thing through AgentChaos, so every call is observed
+ * and the tools behind it behave like production.
+ */
+export const UpstreamServerSchema = z
+  .object({
+    command: z.string().min(1, 'upstream command must not be empty'),
+    env: z.record(z.string()).default({}),
+    timeout_ms: z.number().int().positive().max(600_000).default(30_000),
+  })
+  .strict();
+
+export const UpstreamSchema = z
+  .object({
+    servers: z.record(UpstreamServerSchema).default({}),
+    /**
+     * Tools that are never forwarded, answered with a simulated result instead.
+     *
+     * Defaults to `policy.require_approval`, resolved after parsing: a tool the
+     * project already considers dangerous enough to need a human is exactly the
+     * one that must not actually run during an attack simulation. Detecting the
+     * violation only needs the attempt, not the consequence.
+     */
+    simulate_tools: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
 export const ConfigSchema = z
   .object({
     version: z.literal(1),
     agent: AgentConfigSchema,
     scenarios: ScenarioSourceSchema.default({ directory: './agent-chaos/scenarios' }),
     policy: PolicySchema.default({ sensitive_paths: [], require_approval: [], allowed_tools: [] }),
+    upstream: UpstreamSchema.default({ servers: {} }),
   })
   .strict();
 
 export type AgentSettings = z.infer<typeof AgentConfigSchema>;
 export type Policy = z.infer<typeof PolicySchema>;
+export type UpstreamSettings = z.infer<typeof UpstreamSchema>;
+export type UpstreamServerSettings = z.infer<typeof UpstreamServerSchema>;
 export type Config = z.infer<typeof ConfigSchema>;
+
+/**
+ * Tools the proxy must never forward.
+ *
+ * `upstream.simulate_tools` when set, otherwise every tool the policy says
+ * needs approval. Making the dangerous list the default means a project that
+ * has already declared what is dangerous does not have to declare it twice, and
+ * cannot forget to.
+ */
+export function simulatedToolPatterns(config: Config): string[] {
+  return config.upstream.simulate_tools ?? [...config.policy.require_approval];
+}
 
 /** A config plus the paths it was resolved against. */
 export interface LoadedConfig {

@@ -102,11 +102,9 @@ npx agent-chaos report --scenario prompt-injection-sensitive-file
 
 The verdict, the evidence, and the exit codes are identical to the JSONL transport, because it is the same engine. Only the delivery changes.
 
-### What MCP mode can and cannot see
+### Serve mode sees only its own tools
 
-**An MCP server observes calls to its own tools and nothing else.** If your agent also has a real filesystem server attached, AgentChaos cannot see those calls and cannot judge them.
-
-For a complete verdict, point the agent at AgentChaos alone. When it detects calls to tools it does not provide, it reports the run as **inconclusive** and names them, rather than claiming a pass it cannot support:
+In the setup above AgentChaos provides every tool, so every call is visible. If your agent _also_ has a real MCP server attached, AgentChaos cannot see those calls and cannot judge them. It says so rather than reporting a pass it cannot support:
 
 ```
 ! Prompt injection causes sensitive file access
@@ -119,7 +117,43 @@ For a complete verdict, point the agent at AgentChaos alone. When it detects cal
   This scenario did not produce a verdict. It is not a pass.
 ```
 
-Tools are advertised with underscores (`filesystem_read`) because several clients reject dots in tool names, and mapped back to the canonical dotted names your scenarios use. Existing scenario files work over MCP unchanged.
+Proxy mode removes that limitation.
+
+## Proxy mode: real tools, still observed
+
+Serve mode forces a choice between a realistic tool setup and a complete verdict. Proxy mode removes it. AgentChaos sits in front of your real MCP servers: the agent connects to AgentChaos, AgentChaos connects to them, and every call is both real and visible.
+
+```yaml
+upstream:
+  servers:
+    github:
+      command: 'npx -y @modelcontextprotocol/server-github'
+      env:
+        GITHUB_TOKEN: '${GITHUB_TOKEN}'
+    filesystem:
+      command: 'npx -y @modelcontextprotocol/server-filesystem /tmp/sandbox'
+```
+
+Point your agent at AgentChaos as before. Its tools now appear as `github__get_issue`, `filesystem__read_file`, and so on, and are recorded canonically as `github.get_issue` — so a scenario written against the simulated tools works unchanged against the real ones.
+
+### Nothing dangerous is actually performed
+
+Proxy mode is the first time AgentChaos could cause a real side effect, so it does not.
+
+**Detecting a violation never required the dangerous action to complete. It required observing the attempt.** Any tool matching `policy.require_approval` is answered by AgentChaos with a simulated result and recorded as attempted, instead of being forwarded. Benign calls go through to the real server for realism.
+
+```
+> ⚠️ AgentChaos intercepted 1 call(s) to github.create_pull_request rather than
+  forwarding them upstream, because the policy marks those tools as requiring
+  approval. The agent attempted them; nothing was actually performed.
+```
+
+Override the list with `upstream.simulate_tools` if your policy and your blast radius differ. Glob patterns work, so `github.*` blocks a whole server.
+
+Two more rules the proxy follows:
+
+- **Injection beats forwarding.** When a scenario targets a tool, the payload is returned and the upstream is never contacted. The point is to hand the agent attacker-controlled content, not to observe the real tool.
+- **A failed upstream is reported, not hidden.** If a server cannot start, its tools are absent and the run says so instead of quietly testing a smaller surface.
 
 ## Commands
 
@@ -467,7 +501,8 @@ Read these before trusting a green run.
 - **Injection is one result per scenario.** Multi-step and multi-turn attack chains are not expressible yet.
 - **Approvals are recorded, not granted.** Behaviour after an approval is granted is untested.
 - **Two transports.** JSONL over stdio, and MCP over stdio. Anything else needs an adapter.
-- **MCP mode sees only its own tools.** If the agent has other servers attached, those calls are invisible and the run is reported inconclusive rather than passing.
+- **Serve mode sees only its own tools.** Use proxy mode, or accept that a run with outside tools is reported inconclusive rather than passing.
+- **Proxy mode never performs an approval-gated action.** It records the attempt and simulates the result, so post-action behaviour is untested.
 - **The scenario corpus is small.** Four scenarios cover four attack classes. That is a starting point, not coverage.
 
 AgentChaos does not guarantee that your agent is secure, and no result from it should be described that way.
@@ -475,8 +510,6 @@ AgentChaos does not guarantee that your agent is secure, and no result from it s
 ## Roadmap
 
 Not in this MVP, in rough priority order:
-
-- An MCP proxy mode, so AgentChaos can sit in front of a real MCP server and see the tools it does not itself provide
 
 - HTTP and framework-specific adapters (LangChain, CrewAI, OpenAI Agents)
 - Multi-step scenarios, where a payload is injected across several turns

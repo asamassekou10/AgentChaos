@@ -73,7 +73,7 @@ export function buildProgram(): Command {
     .requiredOption('-s, --scenario <id>', 'scenario to inject during this session')
     .option('-c, --config <path>', 'path to agent-chaos.yaml')
     .option('--session <path>', 'where to write the session recording')
-    .action((options: { scenario: string; config?: string; session?: string }) => {
+    .action(async (options: { scenario: string; config?: string; session?: string }) => {
       // stdout belongs to the MCP protocol here, so every diagnostic and every
       // error goes to stderr. Writing a single stray line to stdout would
       // corrupt the stream and the client would drop the connection.
@@ -82,7 +82,7 @@ export function buildProgram(): Command {
         const all = loadScenarios(loaded.scenarioDir);
         const [selected] = selectScenario(all, options.scenario);
 
-        const handle = startMcpServer(loaded, selected!, {
+        const handle = await startMcpServer(loaded, selected!, {
           ...(options.session !== undefined ? { sessionFile: options.session } : {}),
         });
         runServeCommand(handle);

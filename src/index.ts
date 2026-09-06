@@ -8,7 +8,12 @@
  */
 
 export { loadConfig, ConfigError, resolveConfigPath } from './config/load.js';
-export { ConfigSchema, PolicySchema } from './config/schema.js';
+export {
+  ConfigSchema,
+  PolicySchema,
+  UpstreamSchema,
+  simulatedToolPatterns,
+} from './config/schema.js';
 export type { Config, LoadedConfig, Policy, AgentSettings } from './config/schema.js';
 
 export { loadScenarios, loadScenarioFile, selectScenario } from './scenario/load.js';
@@ -55,5 +60,9 @@ export type { SimulatedTool } from './mcp/tools.js';
 export { SessionWriter, readSession, sessionPath, SESSION_DIR } from './engine/session.js';
 export type { SessionHeader, SessionRecording } from './engine/session.js';
 export { runFromSession } from './cli/commands/report.js';
-export { startMcpServer } from './cli/commands/serve.js';
+export { startMcpServer, runServeCommand } from './cli/commands/serve.js';
+export { McpClient, UpstreamError } from './mcp/client.js';
+export type { UpstreamTool, McpClientOptions } from './mcp/client.js';
+export { UpstreamRouter, upstreamCanonicalName, upstreamMcpName } from './mcp/upstream.js';
+export type { UpstreamRouterOptions, CallDisposition } from './mcp/upstream.js';
 export { renderMcpConfig, mcpConfigEntry } from './cli/commands/mcp-config.js';

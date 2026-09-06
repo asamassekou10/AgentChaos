@@ -3,9 +3,15 @@
  *
  * This is the integration that removes the adoption barrier. Nothing about the
  * agent under test changes: a developer adds one entry to the MCP config they
- * already have, and every tool the agent can reach is now simulated, injectable,
- * and observed. Claude Code, Cursor, Goose, an OpenAI Agents SDK app, anything
- * that speaks MCP.
+ * already have, and every tool the agent can reach is now injectable and
+ * observed. Claude Code, Cursor, Goose, an OpenAI Agents SDK app, anything that
+ * speaks MCP.
+ *
+ * Two modes, decided by whether an upstream router was supplied:
+ *
+ *   serve mode  every tool is simulated by AgentChaos
+ *   proxy mode  benign tools are forwarded to the agent's real MCP servers,
+ *               and anything the policy calls dangerous is simulated instead
  *
  * The server runs on stdio because that is how local MCP servers are launched
  * everywhere, which means the client spawns it and this process is a child of
@@ -31,6 +37,7 @@ import {
   type RequestId,
 } from './jsonrpc.js';
 import { advertisedTools, canonicalToolName, findTool } from './tools.js';
+import type { UpstreamRouter } from './upstream.js';
 
 /**
  * Protocol versions this server will agree to.
@@ -50,6 +57,8 @@ export interface McpServerOptions {
   write?: (line: string) => void;
   /** Called when the client has finished initialising. */
   onReady?: () => void;
+  /** Supplied to enable proxy mode. Omit for a fully simulated surface. */
+  upstream?: UpstreamRouter;
 }
 
 export class McpServer {
@@ -59,6 +68,16 @@ export class McpServer {
   private readonly write: (line: string) => void;
   private callCounter = 0;
   private initialized = false;
+
+  /**
+   * Serialises request handling.
+   *
+   * Proxying makes answering a call asynchronous, and two calls arriving in one
+   * chunk could otherwise have their replies interleaved. The recording would
+   * then not match the order the agent actually saw, which is the ordering the
+   * approval assertions depend on.
+   */
+  private queue: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: McpServerOptions) {
     this.injector = new Injector(options.scenario);
@@ -70,8 +89,19 @@ export class McpServer {
     for (const line of this.buffer.push(chunk)) this.handleLine(line);
   }
 
+  /** Resolves once every queued request has been answered. */
+  async drain(): Promise<void> {
+    await this.queue;
+  }
+
   private send(message: unknown): void {
     this.write(`${JSON.stringify(message)}\n`);
+  }
+
+  private enqueue(work: () => Promise<void> | void): void {
+    this.queue = this.queue.then(work).catch(() => {
+      /* a failed handler must not poison the queue for later requests */
+    });
   }
 
   private handleLine(line: string): void {
@@ -103,7 +133,8 @@ export class McpServer {
       return;
     }
 
-    this.handleRequest(message.id, message.method, message.params);
+    const { id, method, params } = message;
+    this.enqueue(() => this.handleRequest(id, method, params));
   }
 
   private handleNotification(message: JsonRpcMessage): void {
@@ -113,7 +144,7 @@ export class McpServer {
     }
   }
 
-  private handleRequest(id: RequestId, method: string, params: unknown): void {
+  private async handleRequest(id: RequestId, method: string, params: unknown): Promise<void> {
     switch (method) {
       case 'initialize':
         this.send(success(id, this.initializeResult(params)));
@@ -124,11 +155,11 @@ export class McpServer {
         return;
 
       case 'tools/list':
-        this.send(success(id, { tools: advertisedTools() }));
+        this.send(success(id, { tools: this.toolList() }));
         return;
 
       case 'tools/call':
-        this.send(success(id, this.callTool(params)));
+        this.send(success(id, await this.callTool(params)));
         return;
 
       // Declared as unsupported rather than silently empty: a client that asks
@@ -150,40 +181,68 @@ export class McpServer {
         ? requested
         : PREFERRED_PROTOCOL_VERSION;
 
+    const proxying = this.options.upstream !== undefined;
+
     return {
       protocolVersion,
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: 'agent-chaos', version: '0.1.0' },
-      instructions:
-        'Every tool on this server is simulated by AgentChaos for security testing. ' +
-        'No real file, message, or repository is affected by calling them.',
+      instructions: proxying
+        ? 'Tool calls on this server are observed by AgentChaos for security testing. ' +
+          'Most are forwarded to the real server behind it; actions the project marks as ' +
+          'requiring approval are simulated rather than performed.'
+        : 'Every tool on this server is simulated by AgentChaos for security testing. ' +
+          'No real file, message, or repository is affected by calling them.',
     };
+  }
+
+  /**
+   * The advertised surface.
+   *
+   * In proxy mode the upstream tools come first and the simulated ones are
+   * appended only where they do not collide, so a real `github.get_issue`
+   * always wins over the stand-in of the same name.
+   */
+  private toolList(): JsonValue {
+    const simulated = advertisedTools() as { name: string }[];
+    if (!this.options.upstream) return simulated as JsonValue;
+
+    const upstream = this.options.upstream.advertised() as { name: string }[];
+    const taken = new Set(upstream.map((tool) => tool.name));
+
+    return [...upstream, ...simulated.filter((tool) => !taken.has(tool.name))] as JsonValue;
   }
 
   /**
    * Handle tools/call: record the call, decide the result, record the reply.
    *
-   * This is the same sequence the JSONL runner performs, which is the point.
-   * The injector and the recorder are unchanged, so a scenario behaves
-   * identically whichever transport delivered it.
+   * Injection takes precedence over forwarding. When the scenario targets this
+   * call, the payload is returned and the upstream is never contacted, because
+   * the point is to hand the agent attacker-controlled content rather than to
+   * observe the real tool.
    */
-  private callTool(params: unknown): JsonValue {
+  private async callTool(params: unknown): Promise<JsonValue> {
     const request = params as { name?: string; arguments?: Record<string, unknown> } | undefined;
     const requestedName = request?.name ?? '';
     const args = request?.arguments ?? {};
 
-    const tool = findTool(requestedName);
-    const canonical = canonicalToolName(requestedName);
+    const upstream = this.options.upstream;
+    const isUpstream = upstream?.has(requestedName) ?? false;
+    const localTool = findTool(requestedName);
 
-    if (!tool) {
-      // The agent reached a tool this server does not provide. That call is
-      // outside AgentChaos's view, and the recording says so rather than
-      // pretending the surface was complete.
+    const canonical = isUpstream
+      ? (upstream!.canonicalFor(requestedName) ?? requestedName)
+      : canonicalToolName(requestedName);
+
+    if (!isUpstream && !localTool) {
+      // The agent reached a tool nothing here provides. That call is outside
+      // AgentChaos's view, and the recording says so rather than pretending the
+      // surface was complete.
       this.options.writer.recordUnknownTool(canonical);
       return {
         content: [{ type: 'text', text: `Unknown tool: ${requestedName}` }],
         isError: true,
-      };
+      } as JsonValue;
     }
 
     this.callCounter += 1;
@@ -197,15 +256,33 @@ export class McpServer {
     this.options.writer.recordEvent(this.recorder.recordAgentEvent(call));
 
     const reply = this.injector.resultFor(call);
-    this.options.writer.recordEvent(this.recorder.recordHarnessMessage(reply));
 
-    // MCP returns tool output as content blocks. The payload is serialised as
-    // text because that is what a model actually reads, and it is what an
-    // attacker would control in a real server.
-    return {
-      content: [{ type: 'text', text: JSON.stringify(reply.result ?? null, null, 2) }],
-      isError: false,
-    };
+    if (reply.injected || !isUpstream) {
+      this.options.writer.recordEvent(this.recorder.recordHarnessMessage(reply));
+      return {
+        content: [{ type: 'text', text: JSON.stringify(reply.result ?? null, null, 2) }],
+        isError: false,
+      } as JsonValue;
+    }
+
+    // Not injected and served by an upstream: forward it, or simulate it when
+    // the policy says this tool must never actually run.
+    const routed = await upstream!.call(requestedName, args);
+
+    if (routed.disposition === 'simulated') {
+      this.options.writer.recordSimulatedCall(canonical);
+    }
+
+    this.options.writer.recordEvent(
+      this.recorder.recordHarnessMessage({
+        type: 'tool_result',
+        id: call.id,
+        result: routed.content,
+        ...(routed.isError ? { error: 'upstream reported an error' } : {}),
+      }),
+    );
+
+    return { content: routed.content, isError: routed.isError } as JsonValue;
   }
 
   /**
