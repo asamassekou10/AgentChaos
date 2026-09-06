@@ -21,9 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22 rather than 20, which the test matrix also covers. Current npm
+      # requires Node >= 22.22, so a Node 20 job cannot install an npm new
+      # enough to do trusted publishing at all.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           registry-url: 'https://registry.npmjs.org'
           cache: npm
 
@@ -32,8 +35,23 @@ jobs:
       # rather than depending on what a runner image happens to have.
       - name: Use an npm that understands trusted publishing
         run: |
+          set -euo pipefail
           npm install -g npm@latest
-          npm --version
+          NPM_VERSION="$(npm --version)"
+          echo "npm ${NPM_VERSION}"
+
+          # Assert rather than hope. If a future npm drops support for this
+          # Node line, the install above silently leaves an old npm in place
+          # and the publish fails later with an opaque auth error instead of
+          # saying the real reason.
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!ok) {
+              console.error(`::error::npm ${process.argv[1]} is too old for trusted publishing; 11.5.1 or newer is required`);
+              process.exit(1);
+            }
+          ' "${NPM_VERSION}"
 
       - name: Fail if the tag and package.json disagree
         env:
