@@ -20,6 +20,7 @@ import { runScenario, type ScenarioRun } from '../../engine/runner.js';
 import type { LoadedScenario } from '../../scenario/schema.js';
 import { buildJsonReport, serializeJsonReport } from '../../report/json.js';
 import { renderHumanReport } from '../../report/human.js';
+import { buildAnnotations, formatAnnotation, renderJobSummary } from '../../report/github.js';
 
 export const EXIT_OK = 0;
 export const EXIT_VIOLATION = 1;
@@ -31,6 +32,20 @@ export interface TestOptions {
   json?: string;
   includeTranscript: boolean;
   toolVersion: string;
+  /**
+   * Emit GitHub Actions annotations and a job summary.
+   *
+   * Enabled explicitly rather than by sniffing the CI environment. A tool that
+   * changes its output because it guessed where it was running is a tool whose
+   * output you cannot reproduce locally.
+   */
+  github?: boolean;
+  /** Where the job summary is written. Defaults to $GITHUB_STEP_SUMMARY. */
+  githubSummaryPath?: string;
+  /** Root that annotation file paths are made relative to. */
+  repoRoot?: string;
+  /** Treat an inconclusive run as a failure. Off by default. */
+  failOnInconclusive?: boolean;
 }
 
 export interface TestOutcome {
@@ -38,6 +53,9 @@ export interface TestOutcome {
   runs: ScenarioRun[];
   humanReport: string;
   jsonPath?: string;
+  /** Workflow command lines, when `github` was set. */
+  annotations?: string[];
+  jobSummary?: string;
 }
 
 export async function runTests(
@@ -84,7 +102,35 @@ export function finishRuns(runs: ScenarioRun[], options: TestOptions): TestOutco
   const hasViolation = runs.some((r) => !r.passed && !r.inconclusiveReason);
   const hasInconclusive = runs.some((r) => r.inconclusiveReason);
 
-  const exitCode = hasViolation ? EXIT_VIOLATION : hasInconclusive ? EXIT_ERROR : EXIT_OK;
+  const exitCode = hasViolation
+    ? EXIT_VIOLATION
+    : hasInconclusive && options.failOnInconclusive !== false
+      ? EXIT_ERROR
+      : EXIT_OK;
 
-  return { exitCode, runs, humanReport, ...(jsonPath !== undefined ? { jsonPath } : {}) };
+  let annotations: string[] | undefined;
+  let jobSummary: string | undefined;
+
+  if (options.github) {
+    const repoRoot = options.repoRoot ?? process.cwd();
+    annotations = buildAnnotations(runs, repoRoot).map(formatAnnotation);
+    jobSummary = renderJobSummary(runs);
+
+    const summaryPath = options.githubSummaryPath ?? process.env['GITHUB_STEP_SUMMARY'];
+    if (summaryPath) {
+      // Appended, not overwritten: a workflow may have written to the summary
+      // before this step, and clobbering someone else's output would be rude
+      // and hard to debug.
+      fs.appendFileSync(summaryPath, `${jobSummary}\n`, 'utf8');
+    }
+  }
+
+  return {
+    exitCode,
+    runs,
+    humanReport,
+    ...(jsonPath !== undefined ? { jsonPath } : {}),
+    ...(annotations !== undefined ? { annotations } : {}),
+    ...(jobSummary !== undefined ? { jobSummary } : {}),
+  };
 }

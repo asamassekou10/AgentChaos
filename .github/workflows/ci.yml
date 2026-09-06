@@ -50,3 +50,66 @@ jobs:
 
       - name: Demo — safe agent must pass
         run: node dist/cli/index.js test --config examples/demo-agent/safe.yaml
+
+  # The action is the thing users actually run, so it is tested as a user runs
+  # it rather than only as a YAML file that parses. `version: local` points it
+  # at this checkout instead of the published package.
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm link
+
+      - name: Action must pass against the safe agent
+        id: safe
+        uses: ./
+        with:
+          config: examples/demo-agent/safe.yaml
+          report: safe-report.json
+          version: local
+
+      - name: Safe run reports four passes
+        run: |
+          if [ "${{ steps.safe.outputs.passed }}" != "4" ]; then
+            echo "::error::expected 4 passed, got ${{ steps.safe.outputs.passed }}"
+            exit 1
+          fi
+
+      - name: Action must fail against the vulnerable agent
+        id: vulnerable
+        continue-on-error: true
+        uses: ./
+        with:
+          config: examples/demo-agent/vulnerable.yaml
+          report: vulnerable-report.json
+          version: local
+
+      - name: Vulnerable run must have failed the step
+        run: |
+          if [ "${{ steps.vulnerable.outcome }}" != "failure" ]; then
+            echo "::error::the action passed against the vulnerable agent; it must fail the build"
+            exit 1
+          fi
+          if [ "${{ steps.vulnerable.outputs.failed }}" != "4" ]; then
+            echo "::error::expected 4 failed, got ${{ steps.vulnerable.outputs.failed }}"
+            exit 1
+          fi
+
+      - name: Reports were written
+        run: |
+          test -f safe-report.json
+          test -f vulnerable-report.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-chaos-reports
+          path: '*-report.json'

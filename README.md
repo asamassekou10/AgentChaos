@@ -365,6 +365,8 @@ The schema is a contract: field names and shapes are additive-only within a `rep
 
 ## CI
 
+There is a GitHub Action, so a pull request that makes your agent exploitable fails before it merges.
+
 ```yaml
 name: Agent security
 
@@ -379,7 +381,11 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
-      - run: npx agent-chaos test --json agent-chaos-report.json
+
+      - uses: asamassekou10/AgentChaos@v0
+        with:
+          report: agent-chaos-report.json
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -387,7 +393,53 @@ jobs:
           path: agent-chaos-report.json
 ```
 
-The step fails the build on exit code 1 (a violation) and on exit code 2 (a broken or inconclusive run), which is usually what you want: an agent test that silently stopped testing should not look like a pass.
+A failure appears three ways: the step goes red, an annotation lands on the scenario file that declared the boundary, and the job summary carries the full evidence chain, so you can see what happened without opening an artifact.
+
+### Action inputs
+
+| Input                  | Default                   | What it does                                                                  |
+| ---------------------- | ------------------------- | ----------------------------------------------------------------------------- |
+| `config`               | discovered                | Path to `agent-chaos.yaml`.                                                   |
+| `scenario`             | all                       | Run a single scenario by id.                                                  |
+| `working-directory`    | `.`                       | Directory to run in.                                                          |
+| `report`               | `agent-chaos-report.json` | Where to write the JSON report. Empty string to skip.                         |
+| `include-transcript`   | `false`                   | Put the full transcript in the report. It contains the attack payload.        |
+| `fail-on-inconclusive` | `true`                    | Fail the build when a run produced no verdict.                                |
+| `version`              | `latest`                  | Version to run. Use `local` to run the version you pinned as a devDependency. |
+
+### Action outputs
+
+| Output                               | What it is                                                         |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| `exit-code`                          | `0` passed, `1` a boundary was crossed, `2` error or inconclusive. |
+| `passed` / `failed` / `inconclusive` | Scenario counts.                                                   |
+| `report-path`                        | Path to the JSON report, when one was written.                     |
+
+Use the counts to gate other steps:
+
+```yaml
+- uses: asamassekou10/AgentChaos@v0
+  id: chaos
+  continue-on-error: true
+
+- name: Comment on the PR when a boundary was crossed
+  if: steps.chaos.outputs.failed != '0'
+  run: gh pr comment "${{ github.event.number }}" --body "AgentChaos: ${{ steps.chaos.outputs.failed }} boundary crossed."
+  env:
+    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Why inconclusive fails the build by default
+
+A run that could not deliver its payload has not shown your agent is safe, and a test that silently stopped testing should not look like a pass. Set `fail-on-inconclusive: false` if you would rather treat it as a warning; the annotation is emitted either way.
+
+### Without the Action
+
+The CLI is the same in any CI system. `--github` only adds the annotations and job summary, which other systems ignore harmlessly.
+
+```bash
+npx agent-chaos test --json agent-chaos-report.json
+```
 
 ## Security and safety boundaries
 
@@ -425,7 +477,7 @@ AgentChaos does not guarantee that your agent is secure, and no result from it s
 Not in this MVP, in rough priority order:
 
 - An MCP proxy mode, so AgentChaos can sit in front of a real MCP server and see the tools it does not itself provide
-- A GitHub Action that fails a PR when an attack succeeds
+
 - HTTP and framework-specific adapters (LangChain, CrewAI, OpenAI Agents)
 - Multi-step scenarios, where a payload is injected across several turns
 - Approval granting, to test post-approval behaviour
