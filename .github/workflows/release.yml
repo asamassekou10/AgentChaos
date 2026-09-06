@@ -30,10 +30,10 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           cache: npm
 
-      # Trusted publishing needs npm 11.5.1 or newer. setup-node ships whatever
-      # npm came with the Node release, which is older, so upgrade explicitly
-      # rather than depending on what a runner image happens to have.
-      - name: Use an npm that understands trusted publishing
+      # Trusted publishing needs npm 11.5.1 and staged publishing needs 11.15.0.
+      # setup-node ships whatever npm came with the Node release, which is older,
+      # so upgrade explicitly rather than trusting the runner image.
+      - name: Use an npm that understands staged publishing
         run: |
           set -euo pipefail
           npm install -g npm@latest
@@ -46,9 +46,9 @@ jobs:
           # saying the real reason.
           node -e '
             const [major, minor, patch] = process.argv[1].split(".").map(Number);
-            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            const ok = major > 11 || (major === 11 && minor >= 15);
             if (!ok) {
-              console.error(`::error::npm ${process.argv[1]} is too old for trusted publishing; 11.5.1 or newer is required`);
+              console.error(`::error::npm ${process.argv[1]} is too old for staged publishing; 11.15.0 or newer is required`);
               process.exit(1);
             }
           ' "${NPM_VERSION}"
@@ -176,23 +176,41 @@ jobs:
           fi
           echo "installed package works end to end"
 
+      # Staged rather than published outright, because the trusted publisher is
+      # configured with stage-only permission. CI does the work and parks the
+      # result; a maintainer approves it with 2FA before anyone can install it.
+      #
+      # That is the point. Everything above this line runs with no human
+      # present, so a compromised workflow, or a compromised dependency of one,
+      # could otherwise ship to every user of this package unattended. Staging
+      # keeps a person and a second factor between CI and the registry.
+      #
       # No NODE_AUTH_TOKEN and no secret. npm exchanges the OIDC token minted by
-      # `id-token: write` for publish rights, and generates the provenance
+      # `id-token: write` for staging rights, and generates the provenance
       # attestation itself, so --provenance is not passed.
-      - name: Publish to npm
-        run: npm publish --access public
+      - name: Stage the release on npm
+        run: npm stage publish --access public
 
-      - name: Confirm the published version resolves
+      - name: Say what is waiting and how to release it
         run: |
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
-          for attempt in 1 2 3 4 5; do
-            if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
-              echo "published ${NAME}@${VERSION}"
-              exit 0
-            fi
-            echo "not visible yet, retrying (${attempt}/5)"
-            sleep 10
-          done
-          echo "::error::published but ${NAME}@${VERSION} did not become visible"
-          exit 1
+
+          {
+            echo "## ${NAME}@${VERSION} is staged"
+            echo
+            echo "It is **not installable yet**. Approve it with 2FA to publish:"
+            echo
+            echo '```bash'
+            echo "npm stage list ${NAME}"
+            echo "npm stage approve <stage-id>"
+            echo '```'
+            echo
+            echo "Or reject it with \`npm stage reject <stage-id>\` if something looks wrong."
+            echo
+            echo "Every gate passed before staging: tag matched, version was unclaimed,"
+            echo "the full check ran, both demos reached the right verdict, and the packed"
+            echo "tarball was installed into an empty project and exercised."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          echo "${NAME}@${VERSION} staged. Approve with: npm stage approve <stage-id>"

@@ -1,6 +1,6 @@
 # Releasing
 
-Publishing is automated. Creating a GitHub release publishes the package to npm; nothing is published by hand, and no npm token exists in this repository.
+Releasing is automated up to a deliberate human step. Creating a GitHub release builds, checks, and **stages** the package on npm; a maintainer then approves it with 2FA to make it installable. No npm token exists in this repository.
 
 ## One-time setup
 
@@ -10,12 +10,13 @@ This has to be done once, on npmjs.com, by someone who owns the package. It is n
 2. Go to **Settings** → **Trusted Publisher**.
 3. Choose **GitHub Actions** and fill in:
 
-   | Field                | Value           |
-   | -------------------- | --------------- |
-   | Organization or user | `asamassekou10` |
-   | Repository           | `AgentChaos`    |
-   | Workflow filename    | `release.yml`   |
-   | Environment          | leave empty     |
+   | Field                | Value               |
+   | -------------------- | ------------------- |
+   | Organization or user | `asamassekou10`     |
+   | Repository           | `AgentChaos`        |
+   | Workflow filename    | `release.yml`       |
+   | Permissions          | `npm stage publish` |
+   | Environment          | leave empty         |
 
    The workflow filename is just the file name, not a path.
 
@@ -64,13 +65,29 @@ Step 5 exists because of a specific near-miss. Version 0.1.0 was packed and near
 
 The only thing that caught it was installing the tarball and running it. So that is now a release gate.
 
-## After publishing
+## Approving a staged release
 
-The workflow polls the registry until the new version resolves, so a green run means the package is really there. Confirm independently if you like:
+A green workflow means the package is staged, not published. Nobody can install it yet. Approve it:
+
+```bash
+npm stage list agent-chaos     # find the stage id
+npm stage view <stage-id>      # inspect the tarball first if you want
+npm stage approve <stage-id>   # prompts for 2FA, publishes it
+```
+
+Or `npm stage reject <stage-id>` to discard it.
+
+Then confirm:
 
 ```bash
 npm view agent-chaos version
 ```
+
+### Why staging rather than publishing outright
+
+Everything before the stage step runs with no human present. A compromised workflow, or a compromised dependency of one, could otherwise ship to every user of this package unattended. Staging keeps a person and a second factor between CI and the registry, and costs one command per release.
+
+The trusted publisher is configured with `npm stage publish` permission only, so this is enforced by npm rather than by convention: even a workflow edited to call `npm publish` directly would be refused.
 
 ## If a release fails
 
