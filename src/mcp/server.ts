@@ -38,6 +38,7 @@ import {
 } from './jsonrpc.js';
 import { advertisedTools, canonicalToolName, findTool } from './tools.js';
 import type { UpstreamRouter } from './upstream.js';
+import { VERSION } from '../version.js';
 
 /**
  * Protocol versions this server will agree to.
@@ -186,7 +187,7 @@ export class McpServer {
     return {
       protocolVersion,
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: 'agent-chaos', version: '0.1.0' },
+      serverInfo: { name: 'agent-chaos', version: VERSION },
       instructions: proxying
         ? 'Tool calls on this server are observed by AgentChaos for security testing. ' +
           'Most are forwarded to the real server behind it; actions the project marks as ' +

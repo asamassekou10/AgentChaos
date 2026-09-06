@@ -15,6 +15,7 @@ import { McpServer } from '../src/mcp/server.js';
 import { SessionWriter, readSession } from '../src/engine/session.js';
 import { canonicalToolName, findTool } from '../src/mcp/tools.js';
 import type { Scenario } from '../src/scenario/schema.js';
+import { VERSION as pkgVersion } from '../src/version.js';
 
 let dir: string;
 
@@ -105,6 +106,11 @@ describe('MCP handshake', () => {
     expect(result['protocolVersion']).toBe('2025-06-18');
     expect(result['capabilities']).toHaveProperty('tools');
     expect(result['serverInfo']).toMatchObject({ name: 'agent-chaos' });
+    // The handshake must report the real package version, not a literal that
+    // goes stale the moment someone cuts a release.
+    const info = result['serverInfo'] as { version: string };
+    expect(info.version).toBe(pkgVersion);
+    expect(info.version).not.toBe('0.0.0-unknown');
   });
 
   it('echoes back an older protocol version the client asked for', async () => {

@@ -12,6 +12,7 @@ import path from 'node:path';
 import { LineBuffer } from '../protocol/parse.js';
 import { splitCommand } from '../transport/jsonl-stdio.js';
 import { JSONRPC_VERSION, type RequestId } from './jsonrpc.js';
+import { VERSION } from '../version.js';
 
 /** A tool as an upstream server describes it. */
 export interface UpstreamTool {
@@ -110,7 +111,7 @@ export class McpClient {
     await this.request('initialize', {
       protocolVersion: '2025-06-18',
       capabilities: {},
-      clientInfo: { name: 'agent-chaos-proxy', version: '0.1.0' },
+      clientInfo: { name: 'agent-chaos-proxy', version: VERSION },
     });
 
     this.notify('notifications/initialized', {});
