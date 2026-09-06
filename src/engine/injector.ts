@@ -84,6 +84,10 @@ export function defaultResultFor(tool: string): JsonValue {
       };
     case 'github.create_pull_request':
       return { ok: true, number: 0, note: 'simulated by AgentChaos; nothing was created' };
+    case 'http.fetch':
+      return { status: 200, body: '', note: 'simulated by AgentChaos; no request was made' };
+    case 'shell.exec':
+      return { exitCode: 0, stdout: '', note: 'simulated by AgentChaos; nothing was run' };
     default:
       return { ok: true, note: `simulated result for ${tool}` };
   }

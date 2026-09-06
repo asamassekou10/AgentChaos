@@ -66,7 +66,7 @@ describe('agent-chaos init', () => {
 
     expect(result.status).toBe(0);
     expect(fs.existsSync(path.join(dir, 'agent-chaos.yaml'))).toBe(true);
-    expect(fs.readdirSync(path.join(dir, 'agent-chaos', 'scenarios'))).toHaveLength(4);
+    expect(fs.readdirSync(path.join(dir, 'agent-chaos', 'scenarios'))).toHaveLength(9);
   });
 
   it('does not overwrite an existing file', () => {
@@ -130,7 +130,7 @@ describe('agent-chaos test exit codes', () => {
     );
 
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain('4 failed');
+    expect(result.stdout).toContain('9 failed');
   });
 
   it('exits 0 against the safe demo agent', () => {
@@ -141,7 +141,7 @@ describe('agent-chaos test exit codes', () => {
     );
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('4 passed');
+    expect(result.stdout).toContain('9 passed');
   });
 
   it('exits 2 for a missing config', () => {
@@ -197,7 +197,7 @@ describe('agent-chaos test exit codes', () => {
 
     expect(result.status).toBe(0);
     const report = JSON.parse(fs.readFileSync(target, 'utf8')) as { summary: { passed: number } };
-    expect(report.summary.passed).toBe(4);
+    expect(report.summary.passed).toBe(9);
   });
 
   it('shows the transcript with --verbose', () => {
