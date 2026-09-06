@@ -7,6 +7,7 @@
 
 import pc from 'picocolors';
 import type { LoadedScenario } from '../../scenario/schema.js';
+import { describeOrigin } from '../../scenario/sources.js';
 
 /** The assertion kinds a scenario declares, as a short label. */
 export function describeRule(scenario: LoadedScenario['scenario']): string {
@@ -33,12 +34,17 @@ function oneLine(text: string, maxLength = 60): string {
 export function renderScenarioList(scenarios: LoadedScenario[], color = true): string {
   const c = (fn: (t: string) => string, text: string): string => (color ? fn(text) : text);
 
-  const rows = scenarios.map(({ scenario }) => ({
-    id: scenario.id,
-    severity: scenario.severity,
-    injection: scenario.inject.on_tool,
-    rule: describeRule(scenario),
-    description: oneLine(scenario.description),
+  const rows = scenarios.map((entry) => ({
+    id: entry.scenario.id,
+    severity: entry.scenario.severity,
+    injection: entry.scenario.inject.on_tool,
+    rule: describeRule(entry.scenario),
+    // Provenance is a column rather than a footnote. "Where did this attack
+    // come from" is the first question to ask of content you are about to feed
+    // to your agent, and a pack name in the table answers it at a glance.
+    source: entry.origin ? describeOrigin(entry.origin) : 'local',
+    warnings: (entry.safety ?? []).filter((problem) => problem.severity === 'warning'),
+    description: oneLine(entry.scenario.description),
   }));
 
   const headers = {
@@ -46,6 +52,7 @@ export function renderScenarioList(scenarios: LoadedScenario[], color = true): s
     severity: 'SEVERITY',
     injection: 'INJECTION POINT',
     rule: 'EXPECTED RULE',
+    source: 'SOURCE',
   };
 
   const widths = {
@@ -53,6 +60,7 @@ export function renderScenarioList(scenarios: LoadedScenario[], color = true): s
     severity: Math.max(headers.severity.length, ...rows.map((r) => r.severity.length)),
     injection: Math.max(headers.injection.length, ...rows.map((r) => r.injection.length)),
     rule: Math.max(headers.rule.length, ...rows.map((r) => r.rule.length)),
+    source: Math.max(headers.source.length, ...rows.map((r) => r.source.length)),
   };
 
   const lines: string[] = [''];
@@ -64,7 +72,8 @@ export function renderScenarioList(scenarios: LoadedScenario[], color = true): s
           pad(headers.id, widths.id),
           pad(headers.severity, widths.severity),
           pad(headers.injection, widths.injection),
-          headers.rule,
+          pad(headers.rule, widths.rule),
+          headers.source,
         ].join('  '),
       ),
   );
@@ -77,9 +86,13 @@ export function renderScenarioList(scenarios: LoadedScenario[], color = true): s
           pad(row.severity, widths.severity),
           pad(row.injection, widths.injection),
           pad(row.rule, widths.rule),
+          row.source,
         ].join('  '),
     );
     lines.push('    ' + c(pc.dim, row.description));
+    for (const warning of row.warnings) {
+      lines.push('    ' + c(pc.yellow, `warning: ${warning.where} ${warning.message}`));
+    }
   }
 
   lines.push('');

@@ -9,6 +9,10 @@
 
 import { z } from 'zod';
 import { JsonValueSchema } from '../protocol/events.js';
+// Type-only, so these are erased at build time and introduce no import cycle
+// even though safety.ts and sources.ts both depend on this module's types.
+import type { SafetyProblem } from './safety.js';
+import type { ScenarioOrigin } from './sources.js';
 
 export const SeveritySchema = z.enum(['low', 'medium', 'high', 'critical']);
 export type Severity = z.infer<typeof SeveritySchema>;
@@ -141,8 +145,17 @@ export const ScenarioSchema = z
 
 export type Scenario = z.infer<typeof ScenarioSchema>;
 
-/** A scenario plus where it came from, for error messages. */
+/** A scenario plus where it came from, for error messages and provenance. */
 export interface LoadedScenario {
   scenario: Scenario;
   filePath: string;
+  /**
+   * Which source supplied it.
+   *
+   * Optional so a caller constructing one by hand, as tests do, does not have
+   * to invent an origin. Absent means local.
+   */
+  origin?: ScenarioOrigin;
+  /** Safety problems found in the payload. Errors block loading. */
+  safety?: SafetyProblem[];
 }
