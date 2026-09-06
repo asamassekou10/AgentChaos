@@ -16,7 +16,17 @@ export {
 } from './config/schema.js';
 export type { Config, LoadedConfig, Policy, AgentSettings } from './config/schema.js';
 
-export { loadScenarios, loadScenarioFile, selectScenario } from './scenario/load.js';
+export {
+  loadScenarios,
+  loadFromSources,
+  loadConfiguredScenarios,
+  loadScenarioFile,
+  selectScenario,
+} from './scenario/load.js';
+export { lintScenario, extractHosts, isAllowedHost } from './scenario/safety.js';
+export type { SafetyProblem } from './scenario/safety.js';
+export { resolvePack, resolveSources, describeOrigin } from './scenario/sources.js';
+export type { ScenarioOrigin } from './scenario/sources.js';
 export { ScenarioSchema } from './scenario/schema.js';
 export type { Scenario, LoadedScenario, Severity, Assertions } from './scenario/schema.js';
 

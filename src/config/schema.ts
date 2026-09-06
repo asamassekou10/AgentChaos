@@ -24,6 +24,24 @@ export const AgentConfigSchema = z
 export const ScenarioSourceSchema = z
   .object({
     directory: z.string().default('./agent-chaos/scenarios'),
+    /** Extra local directories, for a project that splits its corpus up. */
+    directories: z.array(z.string().min(1)).default([]),
+    /**
+     * Scenario packs installed from npm.
+     *
+     * npm is the registry. It already does fetching, versioning, lockfiles, and
+     * integrity, and reimplementing any of that here would mean AgentChaos
+     * making outbound requests, which it does not do.
+     */
+    packs: z.array(z.string().min(1)).default([]),
+    /**
+     * Run scenarios whose payload fails the safety check anyway.
+     *
+     * Off by default. A payload carrying a real-looking credential or naming a
+     * routable host is a bug in the pack, and running it against a live agent is
+     * how that bug becomes an incident.
+     */
+    allow_unsafe: z.boolean().default(false),
   })
   .strict();
 
@@ -81,7 +99,12 @@ export const ConfigSchema = z
   .object({
     version: z.literal(1),
     agent: AgentConfigSchema,
-    scenarios: ScenarioSourceSchema.default({ directory: './agent-chaos/scenarios' }),
+    scenarios: ScenarioSourceSchema.default({
+      directory: './agent-chaos/scenarios',
+      directories: [],
+      packs: [],
+      allow_unsafe: false,
+    }),
     policy: PolicySchema.default({ sensitive_paths: [], require_approval: [], allowed_tools: [] }),
     upstream: UpstreamSchema.default({ servers: {} }),
   })

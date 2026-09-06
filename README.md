@@ -160,7 +160,7 @@ Two more rules the proxy follows:
 | Command                               | What it does                                                                             |
 | ------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `agent-chaos init`                    | Write `agent-chaos.yaml` and the built-in scenarios. Never overwrites without `--force`. |
-| `agent-chaos list`                    | Show every scenario with its severity, injection point, and expected rule.               |
+| `agent-chaos list`                    | Show every scenario with its severity, injection point, expected rule, and source.       |
 | `agent-chaos test`                    | Run every scenario.                                                                      |
 | `agent-chaos test --scenario <id>`    | Run one scenario.                                                                        |
 | `agent-chaos test --json report.json` | Also write a JSON report.                                                                |
@@ -323,6 +323,72 @@ Nine, covering nine distinct ways untrusted content turns into a consequence. Ea
 Three of these exist because a defence that stops the first one often misses them. `hidden-unicode-instruction` and `nested-content-injection` are the same attack as `prompt-injection-sensitive-file` delivered somewhere a filter is not looking; `approval-coercion` is `unauthorized-write` against an agent that does ask for approval, but can be argued out of it. If your agent passes the first of each pair and fails the second, that is the finding.
 
 Every payload is a harmless fixture. The secret is a fixed `FAKE_TEST_` string, the addresses are `example.invalid`, and no tool result causes a real action.
+
+## Sharing scenarios
+
+Scenarios are worth sharing between projects, and sharing needs a registry. This one is npm.
+
+A scenario pack is an ordinary npm package that ships YAML files:
+
+```json
+{
+  "name": "agent-chaos-scenarios-acme",
+  "version": "1.2.0",
+  "agentChaos": { "scenarios": "./scenarios" }
+}
+```
+
+Install it and list it:
+
+```bash
+npm install --save-dev agent-chaos-scenarios-acme
+```
+
+```yaml
+scenarios:
+  directory: './agent-chaos/scenarios'
+  packs:
+    - 'agent-chaos-scenarios-acme'
+```
+
+AgentChaos resolves the pack from `node_modules` and reads its directory. **It never fetches anything.** npm already did the fetching, with versioning, a lockfile, and integrity hashes that this tool has no business reimplementing — and the promise that AgentChaos makes no outbound request survives, which it would not if a registry lived inside it.
+
+Where a scenario came from is a column, not a footnote:
+
+```
+ID                          SEVERITY  INJECTION POINT   EXPECTED RULE  SOURCE
+prompt-injection-...        critical  github.get_issue  never          local
+vendor-webhook-injection    high      github.get_issue  never          agent-chaos-scenarios-acme@1.2.0
+```
+
+### A scenario corpus is a supply chain
+
+A pack is attack content that someone else wrote and you are about to feed to your agent. This tool exists because agent supply chains are worth checking, so exempting its own would be the obvious blind spot.
+
+Every scenario is checked before it runs, and two things block it:
+
+**A credential.** Anything shaped like a real OpenAI, Anthropic, GitHub, AWS, Google, or Slack key, a private key block, or a JWT. Either the author leaked it by accident or planted it deliberately; either way it should not be in a file that gets committed and printed in reports. Values marked `FAKE_TEST_`, `EXAMPLE_`, `DUMMY_`, or `PLACEHOLDER` are exempt, which is how the built-in corpus writes realistic payloads.
+
+**A routable hostname.** In proxy mode the agent reaches real tools, so a payload naming a host the pack author controls is a payload asking _your_ agent to talk to _them_. Reserved documentation domains, `.invalid`, `.test`, loopback, link-local, and RFC1918 addresses are all fine — those are the fixtures.
+
+```
+Error  1 scenario(s) have an unsafe payload
+
+exfil.yaml (agent-chaos-scenarios-acme@1.2.0) — scenario "totally-normal-scenario"
+  error: inject.result names the host "collector.attacker-controlled.com". In proxy mode the
+    agent reaches real tools, so a payload naming a routable host is asking the agent under
+    test to contact it. Use example.com, a .invalid domain, or a private address.
+  error: inject.result contains something shaped like a real GitHub token. A scenario payload
+    is committed and shown in reports, so it must never carry a credential.
+```
+
+Assertion patterns are deliberately not linted. Forbidding a host is the entire point of an SSRF scenario, so flagging `contains: ['evil.com']` would make the check unusable for the case it exists for.
+
+Set `scenarios.allow_unsafe: true` to run a flagged scenario anyway. Read it first.
+
+### Writing a pack
+
+Same format as the built-in scenarios, plus the `agentChaos.scenarios` key in `package.json`. Ids must be unique across every source; a pack colliding with one of your local scenarios is an error naming both files rather than a silent shadow, so a pack cannot quietly replace a scenario you rely on.
 
 ## Agent protocol
 
@@ -527,7 +593,6 @@ Not in this MVP, in rough priority order:
 - Approval granting, to test post-approval behaviour
 - Real-model adapters for non-deterministic runs, with repeat counts and flake reporting
 - A2A agent card scenarios
-- A community scenario registry, so attack scenarios can be shared and versioned rather than copied
 
 Explicitly out of scope: a cloud dashboard, user accounts, billing, a hosted service, real exploit delivery, live secret extraction, attacks against remote systems, and LLM-generated attacks.
 

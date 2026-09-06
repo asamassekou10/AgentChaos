@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { ConfigError, loadConfig } from '../config/load.js';
-import { loadScenarios, selectScenario } from '../scenario/load.js';
+import { loadConfiguredScenarios, selectScenario } from '../scenario/load.js';
 import { renderInitResult, runInit } from './commands/init.js';
 import { renderScenarioList } from './commands/list.js';
 import { renderMcpConfig } from './commands/mcp-config.js';
@@ -79,7 +79,7 @@ export function buildProgram(): Command {
       // corrupt the stream and the client would drop the connection.
       try {
         const loaded = loadConfig(options.config, process.cwd());
-        const all = loadScenarios(loaded.scenarioDir);
+        const all = loadConfiguredScenarios(loaded);
         const [selected] = selectScenario(all, options.scenario);
 
         const handle = await startMcpServer(loaded, selected!, {
@@ -101,7 +101,7 @@ export function buildProgram(): Command {
       const color = program.opts<{ color: boolean }>().color !== false;
       try {
         const loaded = loadConfig(options.config, process.cwd());
-        const all = loadScenarios(loaded.scenarioDir);
+        const all = loadConfiguredScenarios(loaded);
         selectScenario(all, options.scenario);
         process.stdout.write(renderMcpConfig(options.scenario, loaded.configPath, color));
       } catch (error) {
@@ -135,7 +135,7 @@ export function buildProgram(): Command {
         const color = program.opts<{ color: boolean }>().color !== false;
         try {
           const loaded = loadConfig(options.config, process.cwd());
-          const all = loadScenarios(loaded.scenarioDir);
+          const all = loadConfiguredScenarios(loaded);
           const selected = options.scenario ? selectScenario(all, options.scenario) : all;
 
           const runs = selected
@@ -189,7 +189,7 @@ export function buildProgram(): Command {
       const color = program.opts<{ color: boolean }>().color !== false;
       try {
         const loaded = loadConfig(options.config, process.cwd());
-        const scenarios = loadScenarios(loaded.scenarioDir);
+        const scenarios = loadConfiguredScenarios(loaded);
         process.stdout.write(renderScenarioList(scenarios, color));
       } catch (error) {
         reportError(error, color);
@@ -221,7 +221,7 @@ export function buildProgram(): Command {
 
         try {
           const loaded = loadConfig(options.config, process.cwd());
-          const all = loadScenarios(loaded.scenarioDir);
+          const all = loadConfiguredScenarios(loaded);
           const selected = options.scenario ? selectScenario(all, options.scenario) : all;
 
           const outcome = await runTests(loaded, selected, {
