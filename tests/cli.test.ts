@@ -33,6 +33,33 @@ function runCli(args: string[], cwd = dir) {
   return spawnSync('node', [cli, ...args, '--no-color'], { cwd, encoding: 'utf8' });
 }
 
+describe('installed entry point', () => {
+  // npm installs `bin` as a symlink in node_modules/.bin, so an installed user
+  // always reaches the CLI through a link rather than the real path. The
+  // entry-point guard compared those two paths unresolved, which was false for
+  // every installed user: the CLI exited 0 and printed nothing. It worked
+  // perfectly from a checkout, so only running it through a link catches it.
+  it('runs when invoked through a symlink, the way npm installs it', () => {
+    const link = path.join(dir, 'agent-chaos-link');
+    fs.symlinkSync(cli, link);
+
+    const result = spawnSync('node', [link, '--version'], { cwd: dir, encoding: 'utf8' });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('runs a real command through the symlink, not just --version', () => {
+    const link = path.join(dir, 'agent-chaos-link');
+    fs.symlinkSync(cli, link);
+
+    const result = spawnSync('node', [link, 'init', '--no-color'], { cwd: dir, encoding: 'utf8' });
+
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(dir, 'agent-chaos.yaml'))).toBe(true);
+  });
+});
+
 describe('agent-chaos init', () => {
   it('creates the config and the built-in scenarios', () => {
     const result = runCli(['init']);

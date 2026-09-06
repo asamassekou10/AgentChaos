@@ -130,10 +130,29 @@ export function buildProgram(): Command {
   return program;
 }
 
+/**
+ * Whether this module was run as the program, rather than imported.
+ *
+ * Both sides are resolved through realpath before comparing. npm installs a
+ * `bin` as a symlink in node_modules/.bin, so `process.argv[1]` is the link
+ * while `import.meta.url` is its target. Comparing them unresolved meant the
+ * guard was false for every installed user and the CLI exited silently with
+ * status 0, printing nothing — working perfectly from a checkout and not at all
+ * from `npm install`.
+ */
 const isDirectRun = (() => {
   const entry = process.argv[1];
   if (!entry) return false;
-  return path.resolve(entry) === fileURLToPath(import.meta.url);
+
+  const real = (target: string): string => {
+    try {
+      return fs.realpathSync(target);
+    } catch {
+      return path.resolve(target);
+    }
+  };
+
+  return real(entry) === real(fileURLToPath(import.meta.url));
 })();
 
 if (isDirectRun) {
