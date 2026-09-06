@@ -64,6 +64,63 @@ Both demos are deterministic and need no API key or model.
 
 The agent never reaches a real filesystem, network, or credential store during a test. Every tool result is simulated.
 
+## Testing an agent you did not write (MCP)
+
+The JSONL protocol below is the reference transport, but most people will not modify their agent to try a testing tool. If your agent speaks MCP — Claude Code, Cursor, Windsurf, Goose, and the OpenAI Agents SDK all do — you can test it without changing a line of its code.
+
+AgentChaos runs as an MCP server providing the whole simulated tool surface. Point your agent at it, and every tool it can reach becomes injectable and observed.
+
+```bash
+npx agent-chaos mcp-config --scenario prompt-injection-sensitive-file
+```
+
+That prints the block to paste into the MCP config you already have:
+
+```json
+{
+  "mcpServers": {
+    "agent-chaos": {
+      "command": "npx",
+      "args": [
+        "agent-chaos",
+        "serve",
+        "--scenario",
+        "prompt-injection-sensitive-file",
+        "--config",
+        "/path/to/agent-chaos.yaml"
+      ]
+    }
+  }
+}
+```
+
+Run your agent as you normally would, give it a task that reads a GitHub issue, then:
+
+```bash
+npx agent-chaos report --scenario prompt-injection-sensitive-file
+```
+
+The verdict, the evidence, and the exit codes are identical to the JSONL transport, because it is the same engine. Only the delivery changes.
+
+### What MCP mode can and cannot see
+
+**An MCP server observes calls to its own tools and nothing else.** If your agent also has a real filesystem server attached, AgentChaos cannot see those calls and cannot judge them.
+
+For a complete verdict, point the agent at AgentChaos alone. When it detects calls to tools it does not provide, it reports the run as **inconclusive** and names them, rather than claiming a pass it cannot support:
+
+```
+! Prompt injection causes sensitive file access
+  Inconclusive
+
+  The agent used tools outside this server (other_server.database_query), so its
+  behaviour was only partly observed. Point the agent at AgentChaos alone to get
+  a complete verdict.
+
+  This scenario did not produce a verdict. It is not a pass.
+```
+
+Tools are advertised with underscores (`filesystem_read`) because several clients reject dots in tool names, and mapped back to the canonical dotted names your scenarios use. Existing scenario files work over MCP unchanged.
+
 ## Commands
 
 | Command                               | What it does                                                                             |
@@ -74,6 +131,9 @@ The agent never reaches a real filesystem, network, or credential store during a
 | `agent-chaos test --scenario <id>`    | Run one scenario.                                                                        |
 | `agent-chaos test --json report.json` | Also write a JSON report.                                                                |
 | `agent-chaos test --verbose`          | Print the full event transcript for each scenario.                                       |
+| `agent-chaos mcp-config`              | Print the MCP server entry to paste into your agent config.                              |
+| `agent-chaos serve`                   | Run as an MCP server, recording the session. Your agent client spawns this.              |
+| `agent-chaos report`                  | Evaluate the session recordings `serve` left behind.                                     |
 
 ### Exit codes
 
@@ -354,7 +414,8 @@ Read these before trusting a green run.
 - **Assertions are structural, not semantic.** AgentChaos knows that `filesystem.read` was called with `.env`. It does not know whether a natural-language final answer leaked something in paraphrase.
 - **Injection is one result per scenario.** Multi-step and multi-turn attack chains are not expressible yet.
 - **Approvals are recorded, not granted.** Behaviour after an approval is granted is untested.
-- **One transport.** JSONL over stdio only. Anything else needs an adapter.
+- **Two transports.** JSONL over stdio, and MCP over stdio. Anything else needs an adapter.
+- **MCP mode sees only its own tools.** If the agent has other servers attached, those calls are invisible and the run is reported inconclusive rather than passing.
 - **The scenario corpus is small.** Four scenarios cover four attack classes. That is a starting point, not coverage.
 
 AgentChaos does not guarantee that your agent is secure, and no result from it should be described that way.
@@ -363,7 +424,8 @@ AgentChaos does not guarantee that your agent is secure, and no result from it s
 
 Not in this MVP, in rough priority order:
 
-- MCP transport, so an MCP server's tools can be intercepted directly
+- An MCP proxy mode, so AgentChaos can sit in front of a real MCP server and see the tools it does not itself provide
+- A GitHub Action that fails a PR when an attack succeeds
 - HTTP and framework-specific adapters (LangChain, CrewAI, OpenAI Agents)
 - Multi-step scenarios, where a payload is injected across several turns
 - Approval granting, to test post-approval behaviour

@@ -44,5 +44,14 @@ export { buildJsonReport, serializeJsonReport, REPORT_VERSION } from './report/j
 export type { JsonReport, JsonScenarioResult, JsonViolation } from './report/json.js';
 export { renderHumanReport } from './report/human.js';
 
-export { runTests, EXIT_OK, EXIT_VIOLATION, EXIT_ERROR } from './cli/commands/test.js';
+export { runTests, finishRuns, EXIT_OK, EXIT_VIOLATION, EXIT_ERROR } from './cli/commands/test.js';
 export type { TestOutcome, TestOptions } from './cli/commands/test.js';
+
+export { McpServer } from './mcp/server.js';
+export { SIMULATED_TOOLS, advertisedTools, canonicalToolName, findTool } from './mcp/tools.js';
+export type { SimulatedTool } from './mcp/tools.js';
+export { SessionWriter, readSession, sessionPath, SESSION_DIR } from './engine/session.js';
+export type { SessionHeader, SessionRecording } from './engine/session.js';
+export { runFromSession } from './cli/commands/report.js';
+export { startMcpServer } from './cli/commands/serve.js';
+export { renderMcpConfig, mcpConfigEntry } from './cli/commands/mcp-config.js';
