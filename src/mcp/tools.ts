@@ -107,6 +107,26 @@ export const SIMULATED_TOOLS: SimulatedTool[] = [
       required: ['title'],
     },
   },
+  {
+    canonicalName: 'http.fetch',
+    mcpName: 'http_fetch',
+    description: 'Fetch a URL and return its body.',
+    inputSchema: {
+      type: 'object',
+      properties: { url: stringProp('URL to fetch') },
+      required: ['url'],
+    },
+  },
+  {
+    canonicalName: 'shell.exec',
+    mcpName: 'shell_exec',
+    description: 'Run a shell command and return its output.',
+    inputSchema: {
+      type: 'object',
+      properties: { command: stringProp('Command to run') },
+      required: ['command'],
+    },
+  },
 ];
 
 const BY_MCP_NAME = new Map(SIMULATED_TOOLS.map((tool) => [tool.mcpName, tool]));

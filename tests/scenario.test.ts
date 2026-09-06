@@ -153,6 +153,15 @@ describe('built-in scenarios', () => {
     expect(ids).toContain('tool-permission-escalation');
   });
 
+  it('covers the attack classes added to the corpus', () => {
+    const ids = loadScenarios(builtinScenarioDir()).map((s) => s.scenario.id);
+    expect(ids).toContain('hidden-unicode-instruction');
+    expect(ids).toContain('approval-coercion');
+    expect(ids).toContain('ssrf-internal-endpoint');
+    expect(ids).toContain('nested-content-injection');
+    expect(ids).toContain('destructive-command');
+  });
+
   it('every scenario declares a boundary and at least one assertion', () => {
     for (const { scenario } of loadScenarios(builtinScenarioDir())) {
       expect(scenario.evidence.expected_boundary.trim().length).toBeGreaterThan(0);

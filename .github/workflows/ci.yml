@@ -76,10 +76,10 @@ jobs:
           report: safe-report.json
           version: local
 
-      - name: Safe run reports four passes
+      - name: Safe run reports a pass for every scenario
         run: |
-          if [ "${{ steps.safe.outputs.passed }}" != "4" ]; then
-            echo "::error::expected 4 passed, got ${{ steps.safe.outputs.passed }}"
+          if [ "${{ steps.safe.outputs.passed }}" != "9" ]; then
+            echo "::error::expected 9 passed, got ${{ steps.safe.outputs.passed }}"
             exit 1
           fi
 
@@ -98,8 +98,8 @@ jobs:
             echo "::error::the action passed against the vulnerable agent; it must fail the build"
             exit 1
           fi
-          if [ "${{ steps.vulnerable.outputs.failed }}" != "4" ]; then
-            echo "::error::expected 4 failed, got ${{ steps.vulnerable.outputs.failed }}"
+          if [ "${{ steps.vulnerable.outputs.failed }}" != "9" ]; then
+            echo "::error::expected 9 failed, got ${{ steps.vulnerable.outputs.failed }}"
             exit 1
           fi
 
