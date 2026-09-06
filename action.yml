@@ -91,12 +91,18 @@ runs:
         # "local" resolves the project's own install, so a repository that pins
         # agent-chaos as a devDependency tests the version it pinned rather than
         # silently upgrading itself on every run.
+        #
+        # The run sits inside an `if` because GitHub executes a composite step
+        # as `bash -e`. A bare invocation would abort the script the moment the
+        # CLI exits non-zero, which is the normal outcome here: the step would
+        # fail correctly but write none of its outputs, so a workflow could not
+        # tell how many scenarios failed. A command in an `if` condition does
+        # not trigger the -e exit.
         if [ "${AC_VERSION}" = "local" ]; then
-          npx agent-chaos "${args[@]}"
+          if npx agent-chaos "${args[@]}"; then code=0; else code=$?; fi
         else
-          npx --yes "agent-chaos@${AC_VERSION}" "${args[@]}"
+          if npx --yes "agent-chaos@${AC_VERSION}" "${args[@]}"; then code=0; else code=$?; fi
         fi
-        code=$?
 
         echo "exit-code=${code}" >> "${GITHUB_OUTPUT}"
 
