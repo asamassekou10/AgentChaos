@@ -1,0 +1,120 @@
+name: 'AgentChaos'
+description: 'Run security attack scenarios against an AI agent and fail the build when one succeeds.'
+author: 'AgentChaos contributors'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  config:
+    description: 'Path to agent-chaos.yaml. Defaults to discovery in working-directory.'
+    required: false
+    default: ''
+  scenario:
+    description: 'Run a single scenario by id. Omit to run all of them.'
+    required: false
+    default: ''
+  working-directory:
+    description: 'Directory to run in.'
+    required: false
+    default: '.'
+  report:
+    description: 'Where to write the JSON report. Set to an empty string to skip.'
+    required: false
+    default: 'agent-chaos-report.json'
+  include-transcript:
+    description: >-
+      Include the full event transcript in the JSON report. The transcript
+      contains the attack payload, so this is off unless you ask for it.
+    required: false
+    default: 'false'
+  fail-on-inconclusive:
+    description: >-
+      Fail the build when a scenario is inconclusive. On by default, because a
+      run that could not deliver its payload has not shown the agent is safe.
+    required: false
+    default: 'true'
+  version:
+    description: >-
+      Version of agent-chaos to run. Use "local" to run whatever is already
+      installed in the project, which is what you want if you pin it as a
+      devDependency.
+    required: false
+    default: 'latest'
+
+outputs:
+  exit-code:
+    description: '0 all passed, 1 a boundary was crossed, 2 error or inconclusive.'
+    value: ${{ steps.run.outputs.exit-code }}
+  passed:
+    description: 'Number of scenarios that passed.'
+    value: ${{ steps.run.outputs.passed }}
+  failed:
+    description: 'Number of scenarios where a boundary was crossed.'
+    value: ${{ steps.run.outputs.failed }}
+  inconclusive:
+    description: 'Number of scenarios that produced no verdict.'
+    value: ${{ steps.run.outputs.inconclusive }}
+  report-path:
+    description: 'Path to the JSON report, when one was written.'
+    value: ${{ steps.run.outputs.report-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        # Inputs reach the script through the environment rather than through
+        # `${{ }}` interpolation. On a fork pull request an input is
+        # attacker-influenced, and interpolating one into a shell body is a
+        # script-injection sink. Reading them as variables removes that.
+        AC_VERSION: ${{ inputs.version }}
+        AC_CONFIG: ${{ inputs.config }}
+        AC_SCENARIO: ${{ inputs.scenario }}
+        AC_REPORT: ${{ inputs.report }}
+        AC_TRANSCRIPT: ${{ inputs.include-transcript }}
+        AC_FAIL_INCONCLUSIVE: ${{ inputs.fail-on-inconclusive }}
+      run: |
+        set -uo pipefail
+
+        args=(test --github)
+
+        if [ -n "${AC_CONFIG}" ]; then args+=(--config "${AC_CONFIG}"); fi
+        if [ -n "${AC_SCENARIO}" ]; then args+=(--scenario "${AC_SCENARIO}"); fi
+        if [ -n "${AC_REPORT}" ]; then args+=(--json "${AC_REPORT}"); fi
+        if [ "${AC_TRANSCRIPT}" = "true" ]; then args+=(--include-transcript); fi
+        if [ "${AC_FAIL_INCONCLUSIVE}" = "false" ]; then args+=(--no-fail-on-inconclusive); fi
+
+        # "local" resolves the project's own install, so a repository that pins
+        # agent-chaos as a devDependency tests the version it pinned rather than
+        # silently upgrading itself on every run.
+        #
+        # The run sits inside an `if` because GitHub executes a composite step
+        # as `bash -e`. A bare invocation would abort the script the moment the
+        # CLI exits non-zero, which is the normal outcome here: the step would
+        # fail correctly but write none of its outputs, so a workflow could not
+        # tell how many scenarios failed. A command in an `if` condition does
+        # not trigger the -e exit.
+        if [ "${AC_VERSION}" = "local" ]; then
+          if npx agent-chaos "${args[@]}"; then code=0; else code=$?; fi
+        else
+          if npx --yes "agent-chaos@${AC_VERSION}" "${args[@]}"; then code=0; else code=$?; fi
+        fi
+
+        echo "exit-code=${code}" >> "${GITHUB_OUTPUT}"
+
+        if [ -n "${AC_REPORT}" ] && [ -f "${AC_REPORT}" ]; then
+          echo "report-path=${AC_REPORT}" >> "${GITHUB_OUTPUT}"
+          REPORT_FILE="${AC_REPORT}" node -e '
+            const fs = require("fs");
+            const report = JSON.parse(fs.readFileSync(process.env.REPORT_FILE, "utf8"));
+            for (const key of ["passed", "failed", "inconclusive"]) {
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, key + "=" + report.summary[key] + "\n");
+            }
+          '
+        fi
+
+        exit "${code}"

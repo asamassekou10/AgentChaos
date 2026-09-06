@@ -43,6 +43,8 @@ export type { Evidence, EvidenceStep } from './evidence/builder.js';
 export { buildJsonReport, serializeJsonReport, REPORT_VERSION } from './report/json.js';
 export type { JsonReport, JsonScenarioResult, JsonViolation } from './report/json.js';
 export { renderHumanReport } from './report/human.js';
+export { buildAnnotations, formatAnnotation, renderJobSummary } from './report/github.js';
+export type { Annotation } from './report/github.js';
 
 export { runTests, finishRuns, EXIT_OK, EXIT_VIOLATION, EXIT_ERROR } from './cli/commands/test.js';
 export type { TestOutcome, TestOptions } from './cli/commands/test.js';

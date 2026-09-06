@@ -119,6 +119,8 @@ export function buildProgram(): Command {
     .option('--json <path>', 'write a JSON report to this path')
     .option('--include-transcript', 'include the full event transcript in the JSON report', false)
     .option('-v, --verbose', 'show the event transcript', false)
+    .option('--github', 'emit GitHub Actions annotations and a job summary', false)
+    .option('--no-fail-on-inconclusive', 'treat an inconclusive run as a pass')
     .action(
       (options: {
         config?: string;
@@ -127,6 +129,8 @@ export function buildProgram(): Command {
         json?: string;
         includeTranscript: boolean;
         verbose: boolean;
+        github: boolean;
+        failOnInconclusive: boolean;
       }) => {
         const color = program.opts<{ color: boolean }>().color !== false;
         try {
@@ -151,9 +155,19 @@ export function buildProgram(): Command {
             ...(options.json !== undefined ? { json: options.json } : {}),
             includeTranscript: options.includeTranscript,
             toolVersion: version,
+            github: options.github,
+            failOnInconclusive: options.failOnInconclusive,
+            repoRoot: process.cwd(),
           });
 
           process.stdout.write(outcome.humanReport);
+
+          // Workflow commands go to stdout, where the Actions runner parses
+          // them. They are printed after the report so a human reading the log
+          // sees the readable version first.
+          for (const annotation of outcome.annotations ?? []) {
+            process.stdout.write(`${annotation}\n`);
+          }
           if (outcome.jsonPath) {
             process.stdout.write(
               `  JSON report written to ${path.relative(process.cwd(), outcome.jsonPath)}\n\n`,
@@ -191,6 +205,8 @@ export function buildProgram(): Command {
     .option('--json <path>', 'write a JSON report to this path')
     .option('--include-transcript', 'include the full event transcript in the JSON report', false)
     .option('-v, --verbose', 'show the event transcript for every scenario', false)
+    .option('--github', 'emit GitHub Actions annotations and a job summary', false)
+    .option('--no-fail-on-inconclusive', 'treat an inconclusive run as a pass')
     .action(
       async (options: {
         config?: string;
@@ -198,6 +214,8 @@ export function buildProgram(): Command {
         json?: string;
         includeTranscript: boolean;
         verbose: boolean;
+        github: boolean;
+        failOnInconclusive: boolean;
       }) => {
         const color = program.opts<{ color: boolean }>().color !== false;
 
@@ -212,9 +230,19 @@ export function buildProgram(): Command {
             ...(options.json !== undefined ? { json: options.json } : {}),
             includeTranscript: options.includeTranscript,
             toolVersion: version,
+            github: options.github,
+            failOnInconclusive: options.failOnInconclusive,
+            repoRoot: process.cwd(),
           });
 
           process.stdout.write(outcome.humanReport);
+
+          // Workflow commands go to stdout, where the Actions runner parses
+          // them. They are printed after the report so a human reading the log
+          // sees the readable version first.
+          for (const annotation of outcome.annotations ?? []) {
+            process.stdout.write(`${annotation}\n`);
+          }
 
           if (outcome.jsonPath) {
             process.stdout.write(
