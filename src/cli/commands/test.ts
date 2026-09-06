@@ -53,6 +53,18 @@ export async function runTests(
     runs.push(await runScenario(loaded, scenario));
   }
 
+  return finishRuns(runs, options);
+}
+
+/**
+ * Render, write, and score a set of runs.
+ *
+ * Split out so `report` reaches the same verdict as `test`. An MCP session and
+ * a JSONL run produce the same ScenarioRun objects, so they must produce the
+ * same output and the same exit code; sharing the code is what guarantees that
+ * rather than two implementations that agree today.
+ */
+export function finishRuns(runs: ScenarioRun[], options: TestOptions): TestOutcome {
   const humanReport = renderHumanReport(runs, {
     verbose: options.verbose,
     color: options.color,
