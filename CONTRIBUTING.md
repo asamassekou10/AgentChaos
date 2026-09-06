@@ -83,6 +83,10 @@ Say what you changed and why in the description. If the behaviour changed, paste
 
 By contributing you agree your work is licensed under the MIT License.
 
+## Releasing
+
+Publishing is automated: creating a GitHub release publishes to npm. There is no npm token in this repository, and nothing is published by hand. See [docs/RELEASING.md](docs/RELEASING.md).
+
 ## Reporting bugs
 
 Open an issue with the version, what you expected, what happened, and a minimal config and scenario that reproduces it. `--verbose` output is usually the fastest thing to include.
