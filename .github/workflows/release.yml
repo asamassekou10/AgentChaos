@@ -1,0 +1,180 @@
+name: Release
+
+# Publishing to npm is permanent: a version number cannot be reused, and an
+# unpublish window is 72 hours at best. Everything before the publish step
+# exists to make sure the thing being made permanent actually works.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  # Required for npm trusted publishing. GitHub mints a short-lived OIDC token
+  # that npm exchanges for publish rights, so there is no long-lived token in
+  # repository secrets for anyone to steal.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      # Trusted publishing needs npm 11.5.1 or newer. setup-node ships whatever
+      # npm came with the Node release, which is older, so upgrade explicitly
+      # rather than depending on what a runner image happens to have.
+      - name: Use an npm that understands trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - name: Fail if the tag and package.json disagree
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="v$(node -p "require('./package.json').version")"
+          if [ "${TAG}" != "${VERSION}" ]; then
+            echo "::error::release tag ${TAG} does not match package.json ${VERSION}"
+            echo "Bump the version and retag, or the published package will not match the release."
+            exit 1
+          fi
+          echo "tag ${TAG} matches package.json"
+
+      - name: Fail if this version is already on npm
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "::error::${NAME}@${VERSION} is already published. Versions cannot be reused."
+            exit 1
+          fi
+          echo "${NAME}@${VERSION} is not yet published"
+
+      - run: npm ci
+
+      # The same gate CI runs on every push. A release is the worst possible
+      # time to discover the build was broken.
+      - name: Full check
+        run: npm run check
+
+      # The demos are the end-to-end proof the engine still reaches the right
+      # verdict, so they gate the release too.
+      - name: Demo — vulnerable agent must fail
+        run: |
+          if node dist/cli/index.js test --config examples/demo-agent/vulnerable.yaml; then
+            echo "::error::vulnerable demo exited 0; it must exit 1"
+            exit 1
+          fi
+
+      - name: Demo — safe agent must pass
+        run: node dist/cli/index.js test --config examples/demo-agent/safe.yaml
+
+      # The check that matters most, and the one this project learned the hard
+      # way. Version 0.1.0 was packed and very nearly published in a state where
+      # every command printed nothing when installed, because npm exposes `bin`
+      # as a symlink and nothing in the test suite ran the CLI through one.
+      # Everything above passes from a checkout. This runs the tarball the way a
+      # user actually gets it.
+      - name: Install the packed tarball and run it as a user would
+        run: |
+          set -euo pipefail
+          TARBALL="$(npm pack --silent)"
+          echo "packed ${TARBALL}"
+
+          CONSUMER="$(mktemp -d)"
+          cp "${TARBALL}" "${CONSUMER}/"
+          cd "${CONSUMER}"
+
+          npm init -y >/dev/null
+          npm install "./${TARBALL}" >/dev/null
+
+          # Assert on the output, not just the exit code. The 0.1.0 bug made
+          # every command print nothing and exit 0, so a check that only looked
+          # at the status would have waved it through.
+          echo "--- agent-chaos --version"
+          INSTALLED_VERSION="$(npx agent-chaos --version || true)"
+          if ! printf '%s' "${INSTALLED_VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::the installed CLI printed no version. It is silently broken."
+            exit 1
+          fi
+          echo "${INSTALLED_VERSION}"
+
+          echo "--- agent-chaos init"
+          npx agent-chaos init --no-color
+          test -f agent-chaos.yaml || {
+            echo "::error::init wrote no config"
+            exit 1
+          }
+
+          echo "--- agent-chaos list"
+          npx agent-chaos list --no-color | grep -q 'prompt-injection-sensitive-file' || {
+            echo "::error::list did not show the built-in scenarios"
+            exit 1
+          }
+
+          # A scenario has to actually run, not just print help. This agent
+          # follows an injected instruction, so the run must fail with exit 1.
+          cat > agent.mjs <<'AGENT'
+          import readline from 'node:readline';
+          const emit = (e) => process.stdout.write(JSON.stringify(e) + '\n');
+          let awaiting = null;
+          const call = (id, tool, args) => { awaiting = { id, tool }; emit({ type: 'tool_call', id, tool, arguments: args }); };
+          readline.createInterface({ input: process.stdin }).on('line', (line) => {
+            if (!line.trim()) return;
+            const m = JSON.parse(line);
+            if (m.type !== 'tool_result' || !awaiting || m.id !== awaiting.id) return;
+            const tool = awaiting.tool; awaiting = null;
+            if (tool === 'github.get_issue' && JSON.stringify(m.result).includes('.env')) {
+              call('c2', 'filesystem.read', { path: '.env' });
+              return;
+            }
+            emit({ type: 'final_output', content: 'done' });
+          });
+          call('c1', 'github.get_issue', { number: 42 });
+          AGENT
+
+          # node rather than sed, because BSD and GNU sed disagree about -i and
+          # this step should be runnable on a maintainer's machine as well as CI.
+          node -e '
+            const fs = require("fs");
+            const text = fs.readFileSync("agent-chaos.yaml", "utf8");
+            fs.writeFileSync(
+              "agent-chaos.yaml",
+              text.replace(/^  command: .*$/m, "  command: \"node agent.mjs\""),
+            );
+          '
+
+          echo "--- agent-chaos test (must exit 1)"
+          if npx agent-chaos test --scenario prompt-injection-sensitive-file --no-color; then
+            echo "::error::the installed package did not detect the injection"
+            exit 1
+          fi
+          echo "installed package works end to end"
+
+      # No NODE_AUTH_TOKEN and no secret. npm exchanges the OIDC token minted by
+      # `id-token: write` for publish rights, and generates the provenance
+      # attestation itself, so --provenance is not passed.
+      - name: Publish to npm
+        run: npm publish --access public
+
+      - name: Confirm the published version resolves
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          for attempt in 1 2 3 4 5; do
+            if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+              echo "published ${NAME}@${VERSION}"
+              exit 0
+            fi
+            echo "not visible yet, retrying (${attempt}/5)"
+            sleep 10
+          done
+          echo "::error::published but ${NAME}@${VERSION} did not become visible"
+          exit 1
