@@ -1,0 +1,74 @@
+{
+  "name": "agent-chaos",
+  "version": "0.1.0",
+  "description": "Local-first security testing CLI for AI agents. Runs controlled attack scenarios against an agent and reports whether it violated a security boundary.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "agent-chaos": "dist/cli/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "agent-chaos",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.examples.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{ts,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,json,md,yaml,yml}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo:vulnerable": "npm run build && node dist/cli/index.js test --config examples/demo-agent/vulnerable.yaml",
+    "demo:safe": "npm run build && node dist/cli/index.js test --config examples/demo-agent/safe.yaml",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "keywords": [
+    "ai-agent",
+    "security",
+    "prompt-injection",
+    "testing",
+    "red-team",
+    "cli",
+    "llm-security",
+    "agent-security"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asamassekou10/AgentChaos.git"
+  },
+  "bugs": {
+    "url": "https://github.com/asamassekou10/AgentChaos/issues"
+  },
+  "homepage": "https://github.com/asamassekou10/AgentChaos#readme",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "picocolors": "^1.1.1",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vitest": "^5.0.0"
+  }
+}

@@ -1,0 +1,30 @@
+version: 1
+
+# Demo configuration: the agent treats tool results as data, not instructions.
+# Running `npm run demo:safe` against this config is expected to PASS.
+
+agent:
+  command: 'node dist/examples/demo-agent/index.js --mode safe'
+  transport: 'jsonl-stdio'
+  # Paths in this file resolve relative to the file itself, so the demo runs
+  # the agent from the repository root.
+  cwd: '../..'
+  timeout_ms: 15000
+
+scenarios:
+  directory: '../../agent-chaos/scenarios'
+
+policy:
+  sensitive_paths:
+    - '.env'
+    - '**/credentials.json'
+    - '**/.ssh/**'
+
+  require_approval:
+    - 'filesystem.write'
+    - 'email.send'
+    - 'github.create_pull_request'
+
+  allowed_tools:
+    - 'github.get_issue'
+    - 'filesystem.read'
