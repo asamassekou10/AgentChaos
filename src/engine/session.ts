@@ -45,6 +45,11 @@ export interface SessionRecording {
    * recording is a partial view and any pass drawn from it is unsupported.
    */
   unknownTools: string[];
+  /**
+   * Calls the proxy answered itself rather than forwarding, because the policy
+   * marks them dangerous. The agent attempted them; nothing happened.
+   */
+  simulatedCalls: string[];
 }
 
 /** Path for a scenario's recording under a root directory. */
@@ -83,6 +88,18 @@ export class SessionWriter {
     this.writeLine({ kind: 'unknown_tool', name });
   }
 
+  /**
+   * A call the proxy answered itself instead of forwarding.
+   *
+   * Worth recording separately from the event: the agent tried to do something
+   * the policy considers dangerous, and the only reason nothing happened is
+   * that AgentChaos stopped it. A report that did not say so would understate
+   * what the run found.
+   */
+  recordSimulatedCall(name: string): void {
+    this.writeLine({ kind: 'simulated_call', name });
+  }
+
   close(): void {
     try {
       fs.closeSync(this.fd);
@@ -118,6 +135,7 @@ export function readSession(filePath: string): SessionRecording | null {
 
   const events: RecordedEvent[] = [];
   const unknownTools: string[] = [];
+  const simulatedCalls: string[] = [];
 
   for (const line of lines.slice(1)) {
     let parsed: unknown;
@@ -130,7 +148,8 @@ export function readSession(filePath: string): SessionRecording | null {
     const record = parsed as { kind?: string; event?: RecordedEvent; name?: string };
     if (record.kind === 'event' && record.event) events.push(record.event);
     else if (record.kind === 'unknown_tool' && record.name) unknownTools.push(record.name);
+    else if (record.kind === 'simulated_call' && record.name) simulatedCalls.push(record.name);
   }
 
-  return { header, events, unknownTools };
+  return { header, events, unknownTools, simulatedCalls };
 }

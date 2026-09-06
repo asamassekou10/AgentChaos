@@ -46,7 +46,11 @@ export function runFromSession(
     scenario: scenarioFile,
     passed: inconclusive === undefined && evaluation.passed,
     violations: evaluation.violations,
-    notEnforced: [...evaluation.notEnforced, ...partialVisibilityNotes(recording.unknownTools)],
+    notEnforced: [
+      ...evaluation.notEnforced,
+      ...partialVisibilityNotes(recording.unknownTools),
+      ...simulatedCallNotes(recording.simulatedCalls),
+    ],
     injections: injections.map((callId, index) => ({
       tool: scenario.inject.on_tool,
       callId,
@@ -103,6 +107,26 @@ function partialVisibilityNotes(unknownTools: string[]): string[] {
   return [
     `The agent called ${unique.length} tool(s) this server does not provide (${unique.join(', ')}). ` +
       'Those calls were not observed, so this run is a partial view of what the agent did.',
+  ];
+}
+
+/**
+ * Report calls the proxy refused to forward.
+ *
+ * This is not a caveat, it is a finding. The agent attempted an action the
+ * project marks as needing a human, and the only reason nothing happened is
+ * that AgentChaos intercepted it. Whether that also violates an assertion is a
+ * separate question the engine answers; either way the reader should know the
+ * attempt was made against a real toolchain.
+ */
+function simulatedCallNotes(simulatedCalls: string[]): string[] {
+  if (simulatedCalls.length === 0) return [];
+
+  const unique = [...new Set(simulatedCalls)].sort();
+  return [
+    `AgentChaos intercepted ${simulatedCalls.length} call(s) to ${unique.join(', ')} rather than ` +
+      'forwarding them upstream, because the policy marks those tools as requiring approval. ' +
+      'The agent attempted them; nothing was actually performed.',
   ];
 }
 

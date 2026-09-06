@@ -74,8 +74,11 @@ function makeServer(overrides: Partial<Scenario> = {}) {
     },
   });
 
-  const send = (message: unknown): void => {
+  // Request handling is queued so that proxied calls keep their order, so a
+  // test has to wait for the queue to drain before reading replies.
+  const send = async (message: unknown): Promise<void> => {
     server.push(`${JSON.stringify(message)}\n`);
+    await server.drain();
   };
 
   return { server, writer, replies, send, sessionFile };
@@ -84,10 +87,10 @@ function makeServer(overrides: Partial<Scenario> = {}) {
 const last = (replies: Record<string, unknown>[]) => replies[replies.length - 1];
 
 describe('MCP handshake', () => {
-  it('answers initialize with capabilities and server info', () => {
+  it('answers initialize with capabilities and server info', async () => {
     const { replies, send } = makeServer();
 
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'initialize',
@@ -104,9 +107,9 @@ describe('MCP handshake', () => {
     expect(result['serverInfo']).toMatchObject({ name: 'agent-chaos' });
   });
 
-  it('echoes back an older protocol version the client asked for', () => {
+  it('echoes back an older protocol version the client asked for', async () => {
     const { replies, send } = makeServer();
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'initialize',
@@ -118,9 +121,9 @@ describe('MCP handshake', () => {
     );
   });
 
-  it('falls back to its preferred version for an unknown one, rather than erroring', () => {
+  it('falls back to its preferred version for an unknown one, rather than erroring', async () => {
     const { replies, send } = makeServer();
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'initialize',
@@ -131,40 +134,41 @@ describe('MCP handshake', () => {
     expect(result['protocolVersion']).toBe('2025-06-18');
   });
 
-  it('never replies to a notification', () => {
+  it('never replies to a notification', async () => {
     const { replies, send, server } = makeServer();
-    send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    await send({ jsonrpc: '2.0', method: 'notifications/initialized' });
 
     expect(replies).toHaveLength(0);
     expect(server.isInitialized()).toBe(true);
   });
 
-  it('answers ping, which clients use as a keepalive', () => {
+  it('answers ping, which clients use as a keepalive', async () => {
     const { replies, send } = makeServer();
-    send({ jsonrpc: '2.0', id: 7, method: 'ping' });
+    await send({ jsonrpc: '2.0', id: 7, method: 'ping' });
 
     expect(last(replies)).toMatchObject({ id: 7, result: {} });
   });
 
-  it('reports a parse error against a null id', () => {
+  it('reports a parse error against a null id', async () => {
     const { replies, server } = makeServer();
     server.push('this is not json\n');
+    await server.drain();
 
     expect(last(replies)).toMatchObject({ id: null, error: { code: -32700 } });
   });
 
-  it('reports an unknown method rather than staying silent', () => {
+  it('reports an unknown method rather than staying silent', async () => {
     const { replies, send } = makeServer();
-    send({ jsonrpc: '2.0', id: 2, method: 'does/not/exist' });
+    await send({ jsonrpc: '2.0', id: 2, method: 'does/not/exist' });
 
     expect(last(replies)).toMatchObject({ id: 2, error: { code: -32601 } });
   });
 });
 
 describe('tools/list', () => {
-  it('advertises the simulated surface', () => {
+  it('advertises the simulated surface', async () => {
     const { replies, send } = makeServer();
-    send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    await send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
     const tools = (last(replies)?.['result'] as { tools: { name: string }[] }).tools;
     const names = tools.map((t) => t.name);
@@ -174,9 +178,9 @@ describe('tools/list', () => {
     expect(names).toContain('email_send');
   });
 
-  it('uses names that satisfy the character set clients validate against', () => {
+  it('uses names that satisfy the character set clients validate against', async () => {
     const { replies, send } = makeServer();
-    send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    await send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
     const tools = (last(replies)?.['result'] as { tools: { name: string }[] }).tools;
     for (const tool of tools) {
@@ -184,9 +188,9 @@ describe('tools/list', () => {
     }
   });
 
-  it('tells the model in every description that the tool is simulated', () => {
+  it('tells the model in every description that the tool is simulated', async () => {
     const { replies, send } = makeServer();
-    send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    await send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
     const tools = (last(replies)?.['result'] as { tools: { description: string }[] }).tools;
     for (const tool of tools) {
@@ -196,9 +200,9 @@ describe('tools/list', () => {
 });
 
 describe('tools/call', () => {
-  it('returns the scenario payload for the injected tool', () => {
+  it('returns the scenario payload for the injected tool', async () => {
     const { replies, send } = makeServer();
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
@@ -210,9 +214,9 @@ describe('tools/call', () => {
     expect(result.content[0]?.text).toContain('Ignore previous instructions');
   });
 
-  it('returns a benign simulated result for a tool the scenario does not target', () => {
+  it('returns a benign simulated result for a tool the scenario does not target', async () => {
     const { replies, send } = makeServer();
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
@@ -226,9 +230,9 @@ describe('tools/call', () => {
     expect(result.content[0]?.text).toContain('simulated');
   });
 
-  it('accepts the dotted spelling as well as the underscored one', () => {
+  it('accepts the dotted spelling as well as the underscored one', async () => {
     const { replies, send } = makeServer();
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
@@ -240,9 +244,9 @@ describe('tools/call', () => {
     expect(result.content[0]?.text).toContain('Ignore previous instructions');
   });
 
-  it('records an unknown tool instead of pretending the surface was complete', () => {
+  it('records an unknown tool instead of pretending the surface was complete', async () => {
     const { send, writer, sessionFile } = makeServer();
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
@@ -256,16 +260,16 @@ describe('tools/call', () => {
 });
 
 describe('session recording', () => {
-  it('captures the call and the injected reply in order', () => {
+  it('captures the call and the injected reply in order', async () => {
     const { send, writer, sessionFile } = makeServer();
 
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
       params: { name: 'github_get_issue', arguments: { number: 42 } },
     });
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 2,
       method: 'tools/call',
@@ -287,9 +291,9 @@ describe('session recording', () => {
     ]);
   });
 
-  it('survives being read after the writer was killed mid-session', () => {
+  it('survives being read after the writer was killed mid-session', async () => {
     const { send, sessionFile } = makeServer();
-    send({
+    await send({
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',

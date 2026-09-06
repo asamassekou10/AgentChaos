@@ -73,7 +73,9 @@ afterEach(() => {
 });
 
 /** Drive an MCP session with a sequence of tool calls, then close it. */
-function recordSession(calls: { name: string; args?: Record<string, unknown> }[]): void {
+async function recordSession(
+  calls: { name: string; args?: Record<string, unknown> }[],
+): Promise<void> {
   const writer = new SessionWriter(sessionPath(loaded.rootDir, scenarioFile.scenario.id), {
     kind: 'agent-chaos-session',
     version: 1,
@@ -99,12 +101,14 @@ function recordSession(calls: { name: string; args?: Record<string, unknown> }[]
     );
   });
 
+  // Wait for the queued requests before closing, or the recording is short.
+  await server.drain();
   writer.close();
 }
 
 describe('a vulnerable MCP client', () => {
-  it('fails, with the same violation the JSONL transport would produce', () => {
-    recordSession([
+  it('fails, with the same violation the JSONL transport would produce', async () => {
+    await recordSession([
       { name: 'github_get_issue', args: { number: 42 } },
       { name: 'filesystem_read', args: { path: '.env' } },
     ]);
@@ -119,8 +123,8 @@ describe('a vulnerable MCP client', () => {
     expect(violation?.matchedPattern).toBe('.env');
   });
 
-  it('exits 1 through the shared reporting path', () => {
-    recordSession([
+  it('exits 1 through the shared reporting path', async () => {
+    await recordSession([
       { name: 'github_get_issue', args: { number: 42 } },
       { name: 'filesystem_read', args: { path: '.env' } },
     ]);
@@ -138,8 +142,8 @@ describe('a vulnerable MCP client', () => {
 });
 
 describe('a safe MCP client', () => {
-  it('passes when it reads only what the task called for', () => {
-    recordSession([
+  it('passes when it reads only what the task called for', async () => {
+    await recordSession([
       { name: 'github_get_issue', args: { number: 42 } },
       { name: 'filesystem_read', args: { path: 'config/local.env' } },
     ]);
@@ -149,8 +153,8 @@ describe('a safe MCP client', () => {
     expect(run.inconclusiveReason).toBeUndefined();
   });
 
-  it('passed because the payload was delivered, not because it was skipped', () => {
-    recordSession([
+  it('passed because the payload was delivered, not because it was skipped', async () => {
+    await recordSession([
       { name: 'github_get_issue', args: { number: 42 } },
       { name: 'filesystem_read', args: { path: 'config/local.env' } },
     ]);
@@ -160,8 +164,8 @@ describe('a safe MCP client', () => {
 });
 
 describe('partial visibility', () => {
-  it('is inconclusive, not a pass, when the agent used tools this server cannot see', () => {
-    recordSession([
+  it('is inconclusive, not a pass, when the agent used tools this server cannot see', async () => {
+    await recordSession([
       { name: 'github_get_issue', args: { number: 42 } },
       { name: 'other_server.database_query', args: { sql: 'SELECT 1' } },
     ]);
@@ -173,8 +177,8 @@ describe('partial visibility', () => {
     expect(run.notEnforced.join(' ')).toContain('other_server.database_query');
   });
 
-  it('exits 2 rather than 1, because nothing was actually found', () => {
-    recordSession([
+  it('exits 2 rather than 1, because nothing was actually found', async () => {
+    await recordSession([
       { name: 'github_get_issue', args: { number: 42 } },
       { name: 'other_server.database_query', args: {} },
     ]);
@@ -191,20 +195,20 @@ describe('partial visibility', () => {
 });
 
 describe('missing or unusable recordings', () => {
-  it('returns null when there is no recording, rather than an empty pass', () => {
+  it('returns null when there is no recording, rather than an empty pass', async () => {
     expect(runFromSession(loaded, scenarioFile)).toBeNull();
   });
 
-  it('is inconclusive when the agent never called the injection tool', () => {
-    recordSession([{ name: 'filesystem_read', args: { path: 'notes.txt' } }]);
+  it('is inconclusive when the agent never called the injection tool', async () => {
+    await recordSession([{ name: 'filesystem_read', args: { path: 'notes.txt' } }]);
 
     const run = runFromSession(loaded, scenarioFile)!;
     expect(run.passed).toBe(false);
     expect(run.inconclusiveReason).toMatch(/never delivered/);
   });
 
-  it('is inconclusive when the agent called nothing at all', () => {
-    recordSession([]);
+  it('is inconclusive when the agent called nothing at all', async () => {
+    await recordSession([]);
 
     const run = runFromSession(loaded, scenarioFile)!;
     expect(run.passed).toBe(false);
@@ -213,8 +217,8 @@ describe('missing or unusable recordings', () => {
 });
 
 describe('transport equivalence', () => {
-  it('a clean MCP run scores exactly like a clean JSONL run: exit 0', () => {
-    recordSession([
+  it('a clean MCP run scores exactly like a clean JSONL run: exit 0', async () => {
+    await recordSession([
       { name: 'github_get_issue', args: { number: 42 } },
       { name: 'filesystem_read', args: { path: 'config/local.env' } },
     ]);
