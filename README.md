@@ -674,6 +674,12 @@ Not in this MVP, in rough priority order:
 
 Explicitly out of scope: a cloud dashboard, user accounts, billing, a hosted service, real exploit delivery, live secret extraction, attacks against remote systems, and LLM-generated attacks.
 
+## The name
+
+Two other projects share it, and they do something different. [`agent-chaos` on PyPI](https://github.com/deepankarm/agent-chaos) and the [AgentChaos paper at ASE 2026](https://arxiv.org/abs/2608.06790) are chaos-engineering tools: they inject infrastructure faults — rate limits, 500s, truncated streams — to test whether an agent stays up.
+
+This AgentChaos tests whether an agent stays _safe_. The scenarios are deterministic attacks, not random faults, and every run asserts a declared security boundary against a recording of what the agent did. If you came here for resilience testing, you want one of the tools above. If you came here to find out what your agent does when a tool result starts giving it orders, you are in the right place.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). New scenarios are the most useful contribution, and the guide has a checklist for writing one.

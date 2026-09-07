@@ -46,7 +46,9 @@
     "red-team",
     "cli",
     "llm-security",
-    "agent-security"
+    "agent-security",
+    "mcp",
+    "mcp-security"
   ],
   "repository": {
     "type": "git",
