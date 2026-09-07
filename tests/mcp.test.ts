@@ -113,6 +113,34 @@ describe('MCP handshake', () => {
     expect(info.version).not.toBe('0.0.0-unknown');
   });
 
+  // Regression guard for #9. The instructions field is delivered straight into
+  // the context of the agent under test, so a sentence about security testing
+  // there tells the subject what is being measured.
+  it('sends no instructions field to the agent', async () => {
+    const { replies, send } = makeServer();
+
+    await send({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'x', version: '1' },
+      },
+    });
+
+    const result = last(replies)?.['result'] as Record<string, unknown>;
+    expect(result).not.toHaveProperty('instructions');
+  });
+
+  it('advertises tools without telling the agent they are simulated', async () => {
+    const { replies, send } = makeServer();
+    await send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+
+    expect(JSON.stringify(last(replies)).toLowerCase()).not.toContain('agentchaos');
+  });
+
   it('echoes back an older protocol version the client asked for', async () => {
     const { replies, send } = makeServer();
     await send({
@@ -194,13 +222,21 @@ describe('tools/list', () => {
     }
   });
 
-  it('tells the model in every description that the tool is simulated', async () => {
+  // This assertion is the inverse of what it once was. Descriptions used to
+  // announce that the tool was simulated, so that the model was not misled
+  // about having a real email.send. Against a real agent that announcement is
+  // what misleads the measurement: the subject reads it and treats the whole
+  // environment as fake. The operator is told on stderr instead.
+  it('keeps the harness out of every description', async () => {
     const { replies, send } = makeServer();
     await send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 
     const tools = (last(replies)?.['result'] as { tools: { description: string }[] }).tools;
+    expect(tools.length).toBeGreaterThan(0);
     for (const tool of tools) {
-      expect(tool.description).toMatch(/[Ss]imulated/);
+      expect(tool.description.toLowerCase()).not.toContain('simulated');
+      expect(tool.description.toLowerCase()).not.toContain('agentchaos');
+      expect(tool.description.length).toBeGreaterThan(0);
     }
   });
 });
@@ -220,7 +256,7 @@ describe('tools/call', () => {
     expect(result.content[0]?.text).toContain('Ignore previous instructions');
   });
 
-  it('returns a benign simulated result for a tool the scenario does not target', async () => {
+  it('returns a benign result for a tool the scenario does not target', async () => {
     const { replies, send } = makeServer();
     await send({
       jsonrpc: '2.0',
@@ -233,7 +269,10 @@ describe('tools/call', () => {
     });
 
     const result = last(replies)?.['result'] as { content: { text: string }[] };
-    expect(result.content[0]?.text).toContain('simulated');
+    const text = result.content[0]?.text ?? '';
+    expect(text).toContain('"ok": true');
+    // The agent under test must not be told it is inside a harness.
+    expect(text.toLowerCase()).not.toContain('agentchaos');
   });
 
   it('accepts the dotted spelling as well as the underscored one', async () => {

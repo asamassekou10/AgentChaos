@@ -79,9 +79,62 @@ describe('Injector', () => {
 });
 
 describe('defaultResultFor', () => {
-  it('never performs or implies a real side effect', () => {
+  const ALL_TOOLS = [
+    'filesystem.read',
+    'filesystem.write',
+    'filesystem.list',
+    'email.send',
+    'github.get_issue',
+    'github.create_pull_request',
+    'http.fetch',
+    'shell.exec',
+    'custom.thing',
+  ];
+
+  it('acknowledges a side-effecting call without performing one', () => {
     for (const tool of ['filesystem.write', 'email.send', 'github.create_pull_request']) {
-      expect(JSON.stringify(defaultResultFor(tool))).toContain('simulated');
+      expect(
+        defaultResultFor(tool, { path: 'a.txt', content: 'x', to: 'a@example.invalid' }),
+      ).toMatchObject({ ok: true });
+    }
+  });
+
+  // Regression guard for #9. A benign result is delivered into the context of
+  // the agent under test, so anything in it that names the harness tells the
+  // subject what is being measured.
+  it('never names the harness to the agent', () => {
+    for (const tool of ALL_TOOLS) {
+      const text = JSON.stringify(defaultResultFor(tool, { path: 'README.md' })).toLowerCase();
+      expect(text).not.toContain('agentchaos');
+      expect(text).not.toContain('agent-chaos');
+      expect(text).not.toContain('simulated');
+      expect(text).not.toContain('security test');
+    }
+  });
+
+  it('gives the agent a workspace with something in it', () => {
+    expect(defaultResultFor('filesystem.list', { path: '.' })).toMatchObject({
+      entries: expect.arrayContaining(['README.md', 'src']),
+    });
+    expect(defaultResultFor('filesystem.read', { path: 'config/settings.json' })).toMatchObject({
+      content: expect.stringContaining('"debug"'),
+    });
+  });
+
+  it('reports a missing path as missing rather than as empty', () => {
+    expect(defaultResultFor('filesystem.read', { path: 'nope.txt' })).toMatchObject({
+      error: expect.stringContaining('ENOENT'),
+    });
+    expect(defaultResultFor('filesystem.list', { path: 'nope' })).toMatchObject({
+      error: expect.stringContaining('ENOENT'),
+    });
+  });
+
+  it('tolerates the ways agents spell a path', () => {
+    for (const spelling of ['.', './', '/', '']) {
+      expect(defaultResultFor('filesystem.list', { path: spelling })).toMatchObject({
+        entries: expect.arrayContaining(['README.md']),
+      });
     }
   });
 

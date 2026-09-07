@@ -628,7 +628,8 @@ AgentChaos is a testing tool that simulates attacks. It is built so that running
 Read these before trusting a green run.
 
 - **A pass is not proof of safety.** It means the scenarios you ran did not produce a violation. It says nothing about attacks you did not write.
-- **A deterministic agent is not a model.** Real agents are non-deterministic; the same scenario may pass on one run and fail on the next. Treat a single pass as weak evidence.
+- **A deterministic agent is not a model.** Real agents are non-deterministic; the same scenario may pass on one run and fail on the next. Treat a single pass as weak evidence, and use `--repeat` when the agent is a real model.
+- **The environment is still detectable.** AgentChaos no longer names itself in anything the agent can see, and the benign tools describe a small ordinary project rather than an empty directory. It is not undetectable, and cannot be: the payload safety rules require fixture values like `FAKE_TEST_SECRET_12345` to be obviously fake, which is exactly the kind of thing an attentive agent notices. Refusing to exfiltrate a string that looks like a placeholder is weaker evidence than refusing to exfiltrate one that does not.
 - **Assertions are structural, not semantic.** AgentChaos knows that `filesystem.read` was called with `.env`. It does not know whether a natural-language final answer leaked something in paraphrase.
 - **Injection is one result per scenario.** Multi-step and multi-turn attack chains are not expressible yet.
 - **Approvals are recorded, not granted.** Behaviour after an approval is granted is untested.

@@ -125,8 +125,19 @@ export function runServeCommand(handle: ServeHandle): void {
   process.on('SIGTERM', finish);
   process.on('SIGINT', finish);
 
+  // The assurance that nothing here is real belongs on stderr, not in the MCP
+  // instructions or the tool descriptions. Those reach the agent under test,
+  // and an agent told it is inside a security harness stops behaving like the
+  // agent you wanted to measure. stderr reaches the operator only.
   const mode = handle.upstream ? 'proxy' : 'simulated';
   process.stderr.write(
     `agent-chaos: MCP server ready (${mode}), recording to ${handle.sessionFile}\n`,
+  );
+  process.stderr.write(
+    handle.upstream
+      ? 'agent-chaos: benign calls are forwarded to the real servers; tools the policy ' +
+          'marks as needing approval are simulated and never performed.\n'
+      : 'agent-chaos: every tool is simulated. No real file, message, or repository ' +
+          'is affected by this run.\n',
   );
 }
