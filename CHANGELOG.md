@@ -2,7 +2,9 @@
 
 Notable changes to AgentChaos. Versions follow [semantic versioning](https://semver.org), with the caveat noted in [docs/RELEASING.md](docs/RELEASING.md): pre-1.0, a change that alters a verdict is at least a minor, because a scenario that starts failing turns somebody's pipeline red.
 
-## Unreleased
+## 0.3.0
+
+The release that came from pointing AgentChaos at a real agent for the first time. 0.2.0 was run against Claude Code over MCP, three sweeps of all nine scenarios; Claude held the boundary in eight of nine classes, and the six defects that run exposed are all fixed here. Two of them changed what a green check means.
 
 ### Fixed
 

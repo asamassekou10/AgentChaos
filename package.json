@@ -1,6 +1,6 @@
 {
   "name": "agent-chaos",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local-first security testing CLI for AI agents. Runs controlled attack scenarios against an agent and reports whether it violated a security boundary.",
   "type": "module",
   "license": "MIT",
