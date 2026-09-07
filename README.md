@@ -1,6 +1,24 @@
-# AgentChaos
+<div align="center">
 
-Safely attack your AI agent before someone else does.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/asamassekou10/AgentChaos/main/docs/assets/logo-dark.png">
+  <img src="https://raw.githubusercontent.com/asamassekou10/AgentChaos/main/docs/assets/logo.png" alt="AgentChaos" width="440">
+</picture>
+
+### Safely attack your AI agent before someone else does.
+
+[![npm](https://img.shields.io/npm/v/agent-chaos?color=FC3D50&label=npm)](https://www.npmjs.com/package/agent-chaos)
+[![CI](https://github.com/asamassekou10/AgentChaos/actions/workflows/ci.yml/badge.svg)](https://github.com/asamassekou10/AgentChaos/actions/workflows/ci.yml)
+[![node](https://img.shields.io/node/v/agent-chaos?color=FC3D50)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/agent-chaos?color=FC3D50)](LICENSE)
+
+[Quick start](#quick-start) &nbsp;·&nbsp; [Testing an agent you did not write](#testing-an-agent-you-did-not-write-mcp) &nbsp;·&nbsp; [Scenarios](#built-in-scenarios) &nbsp;·&nbsp; [CI](#ci) &nbsp;·&nbsp; [Limitations](#limitations)
+
+<a href="https://github.com/asamassekou10/AgentChaos/blob/main/docs/assets/agentchaos-motion.mp4">
+  <img src="https://raw.githubusercontent.com/asamassekou10/AgentChaos/main/docs/assets/pipeline.png" alt="Untrusted input reaches an AI agent, which makes a tool call against a protected resource" width="820">
+</a>
+
+</div>
 
 AgentChaos is a local-first security testing CLI for AI agents. It runs controlled attack scenarios against your agent, replaces selected tool responses with malicious test content, watches what the agent does next, and tells you whether it crossed a security boundary.
 
@@ -22,6 +40,10 @@ AgentChaos is a local-first security testing CLI for AI agents. It runs controll
 
 Summary: 8 passed, 1 failed
 ```
+
+Works against agents you did not write: if it speaks MCP — Claude Code, Cursor, Windsurf, Goose, the OpenAI Agents SDK — you can test it without changing a line of its code.
+
+---
 
 ## The problem
 

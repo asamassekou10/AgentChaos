@@ -5,3 +5,6 @@ coverage/
 .DS_Store
 .env
 report.json
+
+# Source assets for the README; the exported ones live in docs/assets/
+readme assets/
