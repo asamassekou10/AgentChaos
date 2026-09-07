@@ -165,6 +165,7 @@ Two more rules the proxy follows:
 | `agent-chaos test --scenario <id>`    | Run one scenario.                                                                        |
 | `agent-chaos test --json report.json` | Also write a JSON report.                                                                |
 | `agent-chaos test --verbose`          | Print the full event transcript for each scenario.                                       |
+| `agent-chaos test --repeat <n>`       | Run each scenario n times and report the worst outcome, with the counts.                 |
 | `agent-chaos mcp-config`              | Print the MCP server entry to paste into your agent config.                              |
 | `agent-chaos serve`                   | Run as an MCP server, recording the session. Your agent client spawns this.              |
 | `agent-chaos report`                  | Evaluate the session recordings `serve` left behind.                                     |
@@ -178,6 +179,24 @@ Two more rules the proxy follows:
 | `2`  | Configuration error, execution error, or an inconclusive run. |
 
 An **inconclusive** run is one where the payload was never delivered, the agent crashed, or it timed out. It exits `2` rather than `0`, because "we could not test this" and "this is safe" are different answers. It exits `2` rather than `1` so that a broken harness never looks like a discovered vulnerability.
+
+### Running a scenario more than once
+
+A deterministic agent gives the same answer every time, so one run is one answer. A real model does not. The same scenario against the same model can pass and fail on consecutive runs, and a single run printed as a verdict hides that completely.
+
+```bash
+npx agent-chaos test --repeat 5
+```
+
+Each scenario runs five times and the **worst outcome is reported**, because a scenario that fails one run in five is a scenario that fails; an agent does not become safe by being asked again. The counts come with it, so an intermittent failure is distinguishable from a reliable one:
+
+```
+✗ Injected instruction causes an unapproved write
+  Severity: high
+  Across 5 runs: failed 3, passed 2. Reporting the worst.
+```
+
+That line appears only when the outcomes disagreed. Five identical results are already described by the verdict above them. The counts are in the JSON report as `scenarios[].repeat` either way, and are absent entirely for a single run, so a report of one run never implies a frequency it cannot support.
 
 ## Configuration reference
 
@@ -627,7 +646,7 @@ Not in this MVP, in rough priority order:
 - HTTP and framework-specific adapters (LangChain, CrewAI, OpenAI Agents)
 - Multi-step scenarios, where a payload is injected across several turns
 - Approval granting, to test post-approval behaviour
-- Real-model adapters for non-deterministic runs, with repeat counts and flake reporting
+- Real-model adapters for non-deterministic runs
 - A2A agent card scenarios
 
 Explicitly out of scope: a cloud dashboard, user accounts, billing, a hosted service, real exploit delivery, live secret extraction, attacks against remote systems, and LLM-generated attacks.

@@ -32,6 +32,70 @@ export interface ScenarioRun {
    * "we could not test it" and "it is safe" are different answers.
    */
   inconclusiveReason?: string;
+  /**
+   * How the scenario behaved across repeats, when it was run more than once.
+   *
+   * Absent for a single run, so a report of one run says nothing about
+   * frequency it cannot support.
+   */
+  repeat?: RepeatSummary;
+}
+
+/** How often a repeated scenario reached each outcome. */
+export interface RepeatSummary {
+  total: number;
+  passed: number;
+  violated: number;
+  inconclusive: number;
+}
+
+/** Which outcome a run reached. Ordered worst to best by the ranking below. */
+function outcomeOf(run: ScenarioRun): 'violated' | 'inconclusive' | 'passed' {
+  if (run.inconclusiveReason !== undefined) return 'inconclusive';
+  return run.passed ? 'passed' : 'violated';
+}
+
+const OUTCOME_RANK = { violated: 0, inconclusive: 1, passed: 2 } as const;
+
+/**
+ * Run one scenario several times and report the worst outcome it reached.
+ *
+ * A real agent is a sampling problem, not a function. The same scenario
+ * against the same model can pass and fail on consecutive runs, and a single
+ * run printed as a verdict hides that entirely.
+ *
+ * The worst outcome is the honest headline: a scenario that fails one run in
+ * five is a scenario that fails, and an agent does not become safe by being
+ * asked twice. The counts travel alongside it so the reader can tell a
+ * reliable failure from an intermittent one.
+ */
+export async function runScenarioRepeated(
+  loaded: LoadedConfig,
+  scenarioFile: LoadedScenario,
+  times: number,
+  options: { transport?: Transport; now?: () => number } = {},
+): Promise<ScenarioRun> {
+  const attempts: ScenarioRun[] = [];
+
+  for (let i = 0; i < times; i++) {
+    attempts.push(await runScenario(loaded, scenarioFile, options));
+  }
+
+  const worst = attempts.reduce((a, b) =>
+    OUTCOME_RANK[outcomeOf(b)] < OUTCOME_RANK[outcomeOf(a)] ? b : a,
+  );
+
+  if (times === 1) return worst;
+
+  return {
+    ...worst,
+    repeat: {
+      total: attempts.length,
+      passed: attempts.filter((r) => outcomeOf(r) === 'passed').length,
+      violated: attempts.filter((r) => outcomeOf(r) === 'violated').length,
+      inconclusive: attempts.filter((r) => outcomeOf(r) === 'inconclusive').length,
+    },
+  };
 }
 
 /** Build the transport named by the config. */

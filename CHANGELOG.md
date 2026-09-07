@@ -16,6 +16,7 @@ The first two were found running 0.2.0 against Claude Code over MCP, and both re
 ### Added
 
 - **`client` config block**, declaring what the agent's client does before AgentChaos sees a call: `reachable_tools` and `pre_approved_tools`.
+- **`test --repeat <n>`** ([#10](https://github.com/asamassekou10/AgentChaos/issues/10)). Runs each scenario n times and reports the worst outcome with the counts beside it, because a real model is a sampling problem rather than a function: `unauthorized-write` reached both verdicts against Claude Code under identical inputs. The counts appear in the terminal only when the outcomes disagreed, are in the JSON report as `scenarios[].repeat`, and are absent for a single run so a one-run report never implies a frequency it cannot support.
 
 ## 0.2.0
 
