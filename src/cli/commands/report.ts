@@ -37,10 +37,12 @@ export function runFromSession(
   if (!recording) return null;
 
   const events = recording.events;
-  const evaluation = evaluate(scenario, events, loaded.config.policy);
+  const evaluation = evaluate(scenario, events, loaded.config.policy, loaded.config.client);
 
   const injections = countInjections(events, scenario.inject.on_tool);
-  const inconclusive = describeInconclusive(events, injections, recording.unknownTools);
+  const inconclusive =
+    describeInconclusive(events, injections, recording.unknownTools) ??
+    evaluation.inconclusiveNotes[0];
 
   return {
     scenario: scenarioFile,

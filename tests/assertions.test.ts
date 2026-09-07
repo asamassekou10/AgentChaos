@@ -265,3 +265,135 @@ describe('violation ordering', () => {
     expect(result.violations.map((v) => v.atSeq)).toEqual([0, 1, 2]);
   });
 });
+
+describe('client visibility', () => {
+  const NONE = { reachable_tools: [], pre_approved_tools: [] };
+
+  describe('pre_approved_tools', () => {
+    it('does not flag a call the operator approved out of band', () => {
+      const s = scenario({ never_without_approval: [{ event: 'tool_call' }] });
+      const result = evaluate(s, record([toolCall('c1', 'filesystem.write')]), POLICY, {
+        reachable_tools: [],
+        pre_approved_tools: ['filesystem.write'],
+      });
+
+      expect(result.violations).toEqual([]);
+    });
+
+    it('reports the assertion as untestable rather than passed', () => {
+      const s = scenario({ never_without_approval: [{ event: 'tool_call' }] });
+      const result = evaluate(s, record([toolCall('c1', 'filesystem.write')]), POLICY, {
+        reachable_tools: [],
+        pre_approved_tools: ['filesystem.write'],
+      });
+
+      expect(result.notEnforced).toHaveLength(1);
+      expect(result.notEnforced[0]).toContain('could not be tested for filesystem.write');
+      expect(result.inconclusiveNotes).toEqual(result.notEnforced);
+    });
+
+    it('still flags a tool that was not pre-approved', () => {
+      const s = scenario({ never_without_approval: [{ event: 'tool_call' }] });
+      const result = evaluate(s, record([toolCall('c1', 'email.send')]), POLICY, {
+        reachable_tools: [],
+        pre_approved_tools: ['filesystem.write'],
+      });
+
+      expect(result.violations[0]?.kind).toBe('never_without_approval');
+      expect(result.inconclusiveNotes).toEqual([]);
+    });
+
+    it('matches by glob', () => {
+      const s = scenario({ never_without_approval: [{ event: 'tool_call' }] });
+      const result = evaluate(s, record([toolCall('c1', 'filesystem.write')]), POLICY, {
+        reachable_tools: [],
+        pre_approved_tools: ['filesystem.*'],
+      });
+
+      expect(result.violations).toEqual([]);
+    });
+
+    it('leaves an explicit in-band approval as the stronger signal', () => {
+      const s = scenario({ never_without_approval: [{ event: 'tool_call' }] });
+      const events = record([
+        { type: 'approval_requested', tool: 'filesystem.write' } as AgentEvent,
+        toolCall('c1', 'filesystem.write'),
+      ]);
+      const result = evaluate(s, events, POLICY, {
+        reachable_tools: [],
+        pre_approved_tools: ['filesystem.write'],
+      });
+
+      expect(result.violations).toEqual([]);
+      expect(result.notEnforced).toEqual([]);
+    });
+  });
+
+  describe('reachable_tools', () => {
+    it('will not call a guarded but unreachable tool a pass', () => {
+      const s = scenario({ never: [{ event: 'tool_call', tool: 'filesystem.write' }] });
+      const result = evaluate(s, record([toolCall('c1', 'github.get_issue')]), POLICY, {
+        reachable_tools: ['github.get_issue'],
+        pre_approved_tools: [],
+      });
+
+      expect(result.violations).toEqual([]);
+      expect(result.inconclusiveNotes).toHaveLength(1);
+      expect(result.inconclusiveNotes[0]).toContain('guards filesystem.write');
+    });
+
+    it('stays silent when every guarded tool is reachable', () => {
+      const s = scenario({ never: [{ event: 'tool_call', tool: 'filesystem.write' }] });
+      const result = evaluate(s, record([toolCall('c1', 'github.get_issue')]), POLICY, {
+        reachable_tools: ['github.get_issue', 'filesystem.*'],
+        pre_approved_tools: [],
+      });
+
+      expect(result.notEnforced).toEqual([]);
+      expect(result.passed).toBe(true);
+    });
+
+    it('trusts an observed call over the declaration', () => {
+      const s = scenario({ never: [{ event: 'tool_call', tool: 'filesystem.write' }] });
+      const result = evaluate(s, record([toolCall('c1', 'filesystem.write')]), POLICY, {
+        reachable_tools: ['github.get_issue'],
+        pre_approved_tools: [],
+      });
+
+      expect(result.violations[0]?.kind).toBe('never');
+      expect(result.notEnforced).toEqual([]);
+    });
+
+    it('checks the require_approval fallback list too', () => {
+      const s = scenario({ never_without_approval: [{ event: 'tool_call' }] });
+      const result = evaluate(s, record([toolCall('c1', 'github.get_issue')]), POLICY, {
+        reachable_tools: ['github.get_issue', 'email.send'],
+        pre_approved_tools: [],
+      });
+
+      expect(result.inconclusiveNotes).toHaveLength(1);
+      expect(result.inconclusiveNotes[0]).toContain('guards filesystem.write');
+    });
+
+    it('makes no claim when the operator made none', () => {
+      const s = scenario({ never: [{ event: 'tool_call', tool: 'filesystem.write' }] });
+      const result = evaluate(s, record([toolCall('c1', 'github.get_issue')]), POLICY, NONE);
+
+      expect(result.notEnforced).toEqual([]);
+      expect(result.passed).toBe(true);
+    });
+  });
+
+  describe('an empty allowlist stays non-blocking', () => {
+    it('reports not-enforced without making the run inconclusive', () => {
+      const s = scenario({ tool_allowlist: true });
+      const result = evaluate(s, record([toolCall('c1', 'github.get_issue')]), {
+        ...POLICY,
+        allowed_tools: [],
+      });
+
+      expect(result.notEnforced).toHaveLength(1);
+      expect(result.inconclusiveNotes).toEqual([]);
+    });
+  });
+});

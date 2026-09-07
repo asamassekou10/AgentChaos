@@ -77,8 +77,10 @@ export async function runScenario(
   });
 
   const events = recorder.getEvents();
-  const evaluation = evaluate(scenario, events, loaded.config.policy);
-  const inconclusive = describeInconclusive(result.reason, events, injector.getInjections().length);
+  const evaluation = evaluate(scenario, events, loaded.config.policy, loaded.config.client);
+  const inconclusive =
+    describeInconclusive(result.reason, events, injector.getInjections().length) ??
+    evaluation.inconclusiveNotes[0];
 
   return {
     scenario: scenarioFile,
