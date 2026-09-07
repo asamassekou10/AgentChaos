@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { LoadedConfig } from '../../config/schema.js';
-import { runScenario, type ScenarioRun } from '../../engine/runner.js';
+import { runScenarioRepeated, type ScenarioRun } from '../../engine/runner.js';
 import type { LoadedScenario } from '../../scenario/schema.js';
 import { buildJsonReport, serializeJsonReport } from '../../report/json.js';
 import { renderHumanReport } from '../../report/human.js';
@@ -46,6 +46,13 @@ export interface TestOptions {
   repoRoot?: string;
   /** Treat an inconclusive run as a failure. Off by default. */
   failOnInconclusive?: boolean;
+  /**
+   * Run every scenario this many times and report the worst outcome.
+   *
+   * Defaults to 1. Worth raising against a real model, where the same scenario
+   * can pass and fail on consecutive runs.
+   */
+  repeat?: number;
 }
 
 export interface TestOutcome {
@@ -64,11 +71,12 @@ export async function runTests(
   options: TestOptions,
 ): Promise<TestOutcome> {
   const runs: ScenarioRun[] = [];
+  const repeat = options.repeat ?? 1;
 
   // Sequential by design. Concurrent runs would interleave child process output
   // and make the ordering that approval assertions depend on unreproducible.
   for (const scenario of scenarios) {
-    runs.push(await runScenario(loaded, scenario));
+    runs.push(await runScenarioRepeated(loaded, scenario, repeat));
   }
 
   return finishRuns(runs, options);

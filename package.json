@@ -26,7 +26,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.examples.json",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.examples.json && node scripts/mark-bin-executable.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

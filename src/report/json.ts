@@ -42,6 +42,11 @@ export interface JsonScenarioResult {
   violations: JsonViolation[];
   notEnforced: string[];
   inconclusiveReason?: string;
+  /**
+   * Outcome counts across repeats. Present only when the scenario ran more
+   * than once, so a consumer can tell "passed" from "passed every time".
+   */
+  repeat?: { total: number; passed: number; violated: number; inconclusive: number };
   transcript?: RecordedEvent[];
 }
 
@@ -103,6 +108,7 @@ export function buildJsonReport(runs: ScenarioRun[], options: JsonReportOptions)
       ...(run.inconclusiveReason !== undefined
         ? { inconclusiveReason: run.inconclusiveReason }
         : {}),
+      ...(run.repeat !== undefined ? { repeat: run.repeat } : {}),
       ...(options.includeTranscript ? { transcript: run.events } : {}),
     };
   });

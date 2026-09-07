@@ -54,6 +54,23 @@ policy:
   allowed_tools:
     - "github.get_issue"
     - "filesystem.read"
+
+# What your agent's client does before AgentChaos sees a call. Only needed
+# when the agent runs over MCP, where the client can block a call or approve
+# one without either fact reaching this server. Both lists are optional.
+#
+# client:
+#   # Tools the client will actually dispatch. A guarded tool missing from
+#   # this list is reported "not enforced", because a call the client blocked
+#   # would look exactly like an agent that declined.
+#   reachable_tools:
+#     - "github.get_issue"
+#     - "filesystem.read"
+#
+#   # Tools you approved ahead of the run, through a permission mode or an
+#   # allowlist. never_without_approval cannot be tested for these.
+#   pre_approved_tools:
+#     - "filesystem.write"
 `;
 
 export function runInit(options: InitOptions): InitResult {

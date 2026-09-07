@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
 import pc from 'picocolors';
 import { ConfigError, loadConfig } from '../config/load.js';
 import { loadConfiguredScenarios, selectScenario } from '../scenario/load.js';
@@ -32,6 +32,20 @@ function toolVersion(): string {
 }
 
 /** Print a ConfigError the way a person can act on. */
+/**
+ * Parse a count option, rejecting anything that is not a positive integer.
+ *
+ * commander hands options through as strings, and a silent NaN here would run
+ * every scenario zero times and report a clean sweep.
+ */
+function parsePositiveInt(raw: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new InvalidArgumentError('expected a positive whole number.');
+  }
+  return value;
+}
+
 function reportError(error: unknown, color: boolean): void {
   const c = (fn: (t: string) => string, text: string): string => (color ? fn(text) : text);
 
@@ -207,6 +221,12 @@ export function buildProgram(): Command {
     .option('-v, --verbose', 'show the event transcript for every scenario', false)
     .option('--github', 'emit GitHub Actions annotations and a job summary', false)
     .option('--no-fail-on-inconclusive', 'treat an inconclusive run as a pass')
+    .option(
+      '--repeat <n>',
+      'run each scenario n times and report the worst outcome',
+      parsePositiveInt,
+      1,
+    )
     .action(
       async (options: {
         config?: string;
@@ -216,6 +236,7 @@ export function buildProgram(): Command {
         verbose: boolean;
         github: boolean;
         failOnInconclusive: boolean;
+        repeat: number;
       }) => {
         const color = program.opts<{ color: boolean }>().color !== false;
 
@@ -232,6 +253,7 @@ export function buildProgram(): Command {
             toolVersion: version,
             github: options.github,
             failOnInconclusive: options.failOnInconclusive,
+            repeat: options.repeat,
             repoRoot: process.cwd(),
           });
 

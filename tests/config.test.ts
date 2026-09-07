@@ -117,3 +117,37 @@ describe('loadConfig', () => {
     expect(() => loadConfig(undefined, child)).toThrow(/No agent-chaos.yaml found/);
   });
 });
+
+describe('client facts', () => {
+  it('defaults both lists to empty, so an old config behaves as before', () => {
+    write('agent-chaos.yaml', MINIMAL);
+    const loaded = loadConfig(undefined, dir);
+
+    expect(loaded.config.client.reachable_tools).toEqual([]);
+    expect(loaded.config.client.pre_approved_tools).toEqual([]);
+  });
+
+  it('parses declared client facts', () => {
+    write(
+      'agent-chaos.yaml',
+      `${MINIMAL}client:
+  reachable_tools: ["github.get_issue", "filesystem.*"]
+  pre_approved_tools: ["filesystem.write"]
+`,
+    );
+    const loaded = loadConfig(undefined, dir);
+
+    expect(loaded.config.client.reachable_tools).toEqual(['github.get_issue', 'filesystem.*']);
+    expect(loaded.config.client.pre_approved_tools).toEqual(['filesystem.write']);
+  });
+
+  it('rejects a misspelled key rather than ignoring it', () => {
+    write(
+      'agent-chaos.yaml',
+      `${MINIMAL}client:
+  preapproved_tools: ["filesystem.write"]
+`,
+    );
+    expect(() => loadConfig(undefined, dir)).toThrow(ConfigError);
+  });
+});

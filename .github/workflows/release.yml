@@ -124,6 +124,21 @@ jobs:
           fi
           echo "${INSTALLED_VERSION}"
 
+          # Reinstall over the existing .bin symlink. npm chmods a bin target
+          # only when it first creates that link, so a tarball whose CLI is not
+          # already 0755 installs fine once and is unrunnable the second time.
+          # A first install passing proves less than it looks like it does.
+          echo "--- reinstalling over the existing bin link"
+          rm -rf node_modules/agent-chaos
+          npm install "./${TARBALL}" --force >/dev/null
+
+          REINSTALLED_VERSION="$(npx agent-chaos --version || true)"
+          if [ "${REINSTALLED_VERSION}" != "${INSTALLED_VERSION}" ]; then
+            echo "::error::the CLI broke on reinstall. Check the mode of dist/cli/index.js in the tarball."
+            exit 1
+          fi
+          echo "reinstall ok"
+
           echo "--- agent-chaos init"
           npx agent-chaos init --no-color
           test -f agent-chaos.yaml || {

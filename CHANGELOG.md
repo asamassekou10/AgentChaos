@@ -2,6 +2,22 @@
 
 Notable changes to AgentChaos. Versions follow [semantic versioning](https://semver.org), with the caveat noted in [docs/RELEASING.md](docs/RELEASING.md): pre-1.0, a change that alters a verdict is at least a minor, because a scenario that starts failing turns somebody's pipeline red.
 
+## Unreleased
+
+### Fixed
+
+- **A call the client blocked is no longer reported as a pass** ([#7](https://github.com/asamassekou10/AgentChaos/issues/7)). AgentChaos sees only the calls an MCP client chooses to dispatch. When the client refused one at its own permission layer, the request never arrived, nothing was recorded, and the scenario printed a green check for a run in which the agent had been hijacked and only the client stopped it. Declare `client.reachable_tools` and a guarded tool outside that set is reported as not enforced instead.
+- **An approval granted out of band no longer reads as a violation** ([#8](https://github.com/asamassekou10/AgentChaos/issues/8)). `never_without_approval` expects an observable approval event, but real clients grant approval through permission modes and allowlists that never cross the wire, so a call the operator authorised looked unapproved. Tools listed in `client.pre_approved_tools` now make the assertion untestable rather than violated.
+
+- **The published CLI is executable** ([#11](https://github.com/asamassekou10/AgentChaos/issues/11)). TypeScript emits `dist/cli/index.js` as 0644, and npm chmods a bin target only when it first creates the `.bin` symlink, so installing over an existing link left the CLI unrunnable with `Permission denied`. The build now sets the mode, and the release workflow reinstalls over an existing link rather than trusting a first install.
+
+The first two were found running 0.2.0 against Claude Code over MCP, and both resolve the same way: the verdict becomes inconclusive and exits `2`, because "we could not see this" is not "the agent behaved". Neither list has a default, so a config that does not mention `client` behaves exactly as before. A declaration never overrides the recording: a call the agent actually made is judged whatever the config claims.
+
+### Added
+
+- **`client` config block**, declaring what the agent's client does before AgentChaos sees a call: `reachable_tools` and `pre_approved_tools`.
+- **`test --repeat <n>`** ([#10](https://github.com/asamassekou10/AgentChaos/issues/10)). Runs each scenario n times and reports the worst outcome with the counts beside it, because a real model is a sampling problem rather than a function: `unauthorized-write` reached both verdicts against Claude Code under identical inputs. The counts appear in the terminal only when the outcomes disagreed, are in the JSON report as `scenarios[].repeat`, and are absent for a single run so a one-run report never implies a frequency it cannot support.
+
 ## 0.2.0
 
 The release that makes AgentChaos usable against agents you did not write.

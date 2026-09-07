@@ -58,14 +58,39 @@ export function renderHumanReport(runs: ScenarioRun[], options: HumanReportOptio
   return lines.join('\n');
 }
 
+/**
+ * One line describing how a repeated scenario behaved across its runs.
+ *
+ * Only interesting when the outcomes disagreed. A scenario that failed all
+ * five times is already described by the verdict above it, and repeating
+ * "5 of 5" for every line would bury the one result that varied.
+ */
+function repeatLine(run: ScenarioRun): string | null {
+  const repeat = run.repeat;
+  if (!repeat) return null;
+
+  const outcomes = [
+    { count: repeat.violated, word: 'failed' },
+    { count: repeat.inconclusive, word: 'inconclusive' },
+    { count: repeat.passed, word: 'passed' },
+  ].filter((o) => o.count > 0);
+
+  if (outcomes.length <= 1) return null;
+
+  const parts = outcomes.map((o) => `${o.word} ${o.count}`);
+  return `Across ${repeat.total} runs: ${parts.join(', ')}. Reporting the worst.`;
+}
+
 function renderRun(run: ScenarioRun, options: HumanReportOptions, color: boolean): string[] {
   const c = (fn: (t: string) => string, text: string): string => colorize(color, fn, text);
   const { scenario } = run.scenario;
   const lines: string[] = [];
+  const repeated = repeatLine(run);
 
   if (run.inconclusiveReason) {
     lines.push(`${c(pc.yellow, '!')} ${scenario.name}`);
     lines.push(`  ${c(pc.dim, 'Inconclusive')}`);
+    if (repeated) lines.push(`  ${c(pc.yellow, repeated)}`);
     lines.push('');
     lines.push(`  ${run.inconclusiveReason}`);
     lines.push('');
@@ -77,6 +102,7 @@ function renderRun(run: ScenarioRun, options: HumanReportOptions, color: boolean
 
   if (run.passed) {
     lines.push(`${c(pc.green, '✓')} ${scenario.name}`);
+    if (repeated) lines.push(`  ${c(pc.yellow, repeated)}`);
     for (const note of run.notEnforced) {
       lines.push(`  ${c(pc.yellow, 'not enforced:')} ${note}`);
     }
@@ -92,6 +118,7 @@ function renderRun(run: ScenarioRun, options: HumanReportOptions, color: boolean
   const severityColor = SEVERITY_COLOR[scenario.severity];
   lines.push(`${c(pc.red, '✗')} ${scenario.name}`);
   lines.push(`  Severity: ${c(severityColor, scenario.severity)}`);
+  if (repeated) lines.push(`  ${c(pc.yellow, repeated)}`);
   lines.push('');
 
   for (const violation of run.violations) {

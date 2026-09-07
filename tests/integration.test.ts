@@ -97,7 +97,7 @@ function writeScenario(name: string, contents: string): void {
   fs.writeFileSync(path.join(dir, 'scenarios', name), contents, 'utf8');
 }
 
-async function run(options: { json?: string } = {}) {
+async function run(options: { json?: string; repeat?: number } = {}) {
   const loaded = loadConfig(undefined, dir);
   const scenarios = loadScenarios(loaded.scenarioDir);
   return runTests(loaded, scenarios, {
@@ -107,6 +107,44 @@ async function run(options: { json?: string } = {}) {
     toolVersion: '0.0.0-test',
     ...options,
   });
+}
+
+/**
+ * An agent that alternates between safe and unsafe on successive runs.
+ *
+ * The counter lives in a file because every run is a fresh process. This is
+ * the shape of the problem --repeat exists for: a real model reached both
+ * outcomes from the same scenario, and a single run cannot tell you that.
+ */
+function writeFlakyAgent(name: string): void {
+  fs.writeFileSync(
+    path.join(dir, name),
+    `import readline from 'node:readline';
+import fs from 'node:fs';
+const counterFile = ${JSON.stringify(path.join(dir, 'run-count'))};
+const previous = fs.existsSync(counterFile) ? Number(fs.readFileSync(counterFile, 'utf8')) : 0;
+const runIndex = previous + 1;
+fs.writeFileSync(counterFile, String(runIndex));
+const emit = (e) => process.stdout.write(JSON.stringify(e) + '\\n');
+let awaiting = null;
+const call = (id, tool, args) => { awaiting = { id, tool }; emit({ type: 'tool_call', id, tool, arguments: args }); };
+const rl = readline.createInterface({ input: process.stdin });
+rl.on('line', (line) => {
+  if (!line.trim()) return;
+  const msg = JSON.parse(line);
+  if (msg.type !== 'tool_result' || !awaiting || msg.id !== awaiting.id) return;
+  const tool = awaiting.tool; awaiting = null;
+  if (tool === 'github.get_issue') {
+    if (runIndex % 2 === 1) { call('c2', 'filesystem.read', { path: '.env' }); return; }
+    emit({ type: 'final_output', content: 'declined' });
+    return;
+  }
+  emit({ type: 'final_output', content: 'done' });
+});
+call('c1', 'github.get_issue', { number: 1 });
+`,
+    'utf8',
+  );
 }
 
 describe('a vulnerable agent', () => {
@@ -319,5 +357,86 @@ describe('JSON report', () => {
     // Nothing from the host environment should ever reach a report.
     expect(serialized).not.toContain(os.homedir());
     expect(serialized).not.toContain(process.env['USER'] ?? '\u0000never');
+  });
+});
+
+describe('--repeat', () => {
+  it('reports a scenario that fails only sometimes as a failure', async () => {
+    writeFlakyAgent('flaky.mjs');
+    writeConfig('flaky.mjs');
+    writeScenario('reads-sensitive.yaml', READ_SENSITIVE_SCENARIO);
+
+    const outcome = await run({ repeat: 4 });
+
+    expect(outcome.exitCode).toBe(EXIT_VIOLATION);
+    expect(outcome.runs[0]?.repeat).toEqual({
+      total: 4,
+      passed: 2,
+      violated: 2,
+      inconclusive: 0,
+    });
+  });
+
+  it('keeps the evidence from a run that actually failed', async () => {
+    writeFlakyAgent('flaky.mjs');
+    writeConfig('flaky.mjs');
+    writeScenario('reads-sensitive.yaml', READ_SENSITIVE_SCENARIO);
+
+    const outcome = await run({ repeat: 4 });
+    const run0 = outcome.runs[0];
+
+    expect(run0?.passed).toBe(false);
+    expect(run0?.violations[0]?.tool).toBe('filesystem.read');
+  });
+
+  it('tells the reader the outcomes disagreed', async () => {
+    writeFlakyAgent('flaky.mjs');
+    writeConfig('flaky.mjs');
+    writeScenario('reads-sensitive.yaml', READ_SENSITIVE_SCENARIO);
+
+    const outcome = await run({ repeat: 4 });
+
+    expect(outcome.humanReport).toContain('Across 4 runs: failed 2, passed 2');
+  });
+
+  it('stays quiet when every run agreed', async () => {
+    writeAgent('safe.mjs', `emit({ type: 'final_output', content: 'declined' });`);
+    writeConfig('safe.mjs');
+    writeScenario('reads-sensitive.yaml', READ_SENSITIVE_SCENARIO);
+
+    const outcome = await run({ repeat: 3 });
+
+    expect(outcome.exitCode).toBe(EXIT_OK);
+    expect(outcome.runs[0]?.repeat?.passed).toBe(3);
+    expect(outcome.humanReport).not.toContain('Across 3 runs');
+  });
+
+  it('records no repeat summary for a single run', async () => {
+    writeAgent('safe.mjs', `emit({ type: 'final_output', content: 'declined' });`);
+    writeConfig('safe.mjs');
+    writeScenario('reads-sensitive.yaml', READ_SENSITIVE_SCENARIO);
+
+    const outcome = await run();
+
+    expect(outcome.runs[0]?.repeat).toBeUndefined();
+  });
+
+  it('carries the counts into the JSON report', async () => {
+    writeFlakyAgent('flaky.mjs');
+    writeConfig('flaky.mjs');
+    writeScenario('reads-sensitive.yaml', READ_SENSITIVE_SCENARIO);
+
+    const outcome = await run({ repeat: 4 });
+    const report = buildJsonReport(outcome.runs, {
+      toolVersion: '0.0.0-test',
+      includeTranscript: false,
+    });
+
+    expect(report.scenarios[0]?.repeat).toEqual({
+      total: 4,
+      passed: 2,
+      violated: 2,
+      inconclusive: 0,
+    });
   });
 });

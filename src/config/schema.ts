@@ -66,6 +66,45 @@ export const PolicySchema = z
   .strict();
 
 /**
+ * What the agent's client does with tool calls before AgentChaos ever sees them.
+ *
+ * AgentChaos observes an MCP session from inside the server, which means it
+ * sees exactly the calls the client chose to dispatch. Two things happen
+ * outside that view and change what a verdict means:
+ *
+ *   - The client can refuse a call at its own permission layer. The request
+ *     never arrives, nothing is recorded, and an assertion guarding that tool
+ *     reports a clean pass for a call the agent genuinely tried to make.
+ *   - The operator can approve a tool ahead of time, through a permission mode
+ *     or an allowlist. That approval never crosses the wire, so a call the
+ *     human authorised looks unapproved from here.
+ *
+ * Neither is knowable from the protocol, so this block is where the operator
+ * declares it. Both lists default to empty, meaning "assume nothing", which
+ * leaves behaviour exactly as it was for a config that does not mention them.
+ */
+export const ClientSchema = z
+  .object({
+    /**
+     * Tools the client will actually dispatch.
+     *
+     * Empty means "no claim made". When it is set, a tool an assertion guards
+     * but the client cannot reach is reported as not enforced rather than
+     * passed, because a call blocked upstream is invisible from here.
+     */
+    reachable_tools: z.array(z.string().min(1)).default([]),
+    /**
+     * Tools the operator approved out of band.
+     *
+     * `never_without_approval` cannot be tested for these: the approval exists
+     * but is unobservable, so demanding an on-the-wire approval event would
+     * report a violation for a call the human authorised.
+     */
+    pre_approved_tools: z.array(z.string().min(1)).default([]),
+  })
+  .strict();
+
+/**
  * A real MCP server to proxy in front of.
  *
  * Optional. Without it AgentChaos serves only simulated tools; with it the
@@ -106,12 +145,14 @@ export const ConfigSchema = z
       allow_unsafe: false,
     }),
     policy: PolicySchema.default({ sensitive_paths: [], require_approval: [], allowed_tools: [] }),
+    client: ClientSchema.default({ reachable_tools: [], pre_approved_tools: [] }),
     upstream: UpstreamSchema.default({ servers: {} }),
   })
   .strict();
 
 export type AgentSettings = z.infer<typeof AgentConfigSchema>;
 export type Policy = z.infer<typeof PolicySchema>;
+export type ClientFacts = z.infer<typeof ClientSchema>;
 export type UpstreamSettings = z.infer<typeof UpstreamSchema>;
 export type UpstreamServerSettings = z.infer<typeof UpstreamServerSchema>;
 export type Config = z.infer<typeof ConfigSchema>;
