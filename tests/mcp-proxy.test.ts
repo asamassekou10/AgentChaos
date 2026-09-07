@@ -216,7 +216,8 @@ describe('safety: dangerous tools are never forwarded', () => {
 
     // The decisive assertion: the upstream was never asked to do it.
     expect(sideEffects()).not.toContain('write_file');
-    expect(text).toContain('simulated');
+    expect(text).toContain('"ok": true');
+    expect(text.toLowerCase()).not.toContain('agentchaos');
   });
 
   it('still records the attempt, because that is the finding', async () => {

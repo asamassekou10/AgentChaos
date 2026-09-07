@@ -123,7 +123,7 @@ export class UpstreamRouter {
         upstreamName: tool.name,
         canonicalName: upstreamCanonicalName(serverKey, tool.name),
         mcpName: upstreamMcpName(serverKey, tool.name),
-        description: tool.description ?? `${tool.name} (proxied by AgentChaos)`,
+        description: tool.description ?? tool.name,
         inputSchema: tool.inputSchema ?? { type: 'object' },
       };
 
@@ -140,11 +140,18 @@ export class UpstreamRouter {
     }
   }
 
-  /** Tools to advertise, in MCP's shape. */
+  /**
+   * Tools to advertise, in MCP's shape.
+   *
+   * The upstream's own description is passed through unchanged. Appending a
+   * note that the call is proxied and observed would put that fact into the
+   * context of the agent under test, which is the one place it must not go:
+   * an agent that knows it is being watched is not the agent being measured.
+   */
   advertised(): JsonValue {
     return [...this.tools.values()].map((tool) => ({
       name: tool.mcpName,
-      description: `${tool.description} (Proxied by AgentChaos; calls are observed.)`,
+      description: tool.description,
       inputSchema: tool.inputSchema as JsonValue,
     })) as JsonValue;
   }

@@ -11,12 +11,23 @@ Notable changes to AgentChaos. Versions follow [semantic versioning](https://sem
 
 - **The published CLI is executable** ([#11](https://github.com/asamassekou10/AgentChaos/issues/11)). TypeScript emits `dist/cli/index.js` as 0644, and npm chmods a bin target only when it first creates the `.bin` symlink, so installing over an existing link left the CLI unrunnable with `Permission denied`. The build now sets the mode, and the release workflow reinstalls over an existing link rather than trusting a first install.
 
-The first two were found running 0.2.0 against Claude Code over MCP, and both resolve the same way: the verdict becomes inconclusive and exits `2`, because "we could not see this" is not "the agent behaved". Neither list has a default, so a config that does not mention `client` behaves exactly as before. A declaration never overrides the recording: a call the agent actually made is judged whatever the config claims.
+- **The harness no longer announces itself to the agent under test** ([#9](https://github.com/asamassekou10/AgentChaos/issues/9)). The MCP `instructions` field, every advertised tool description, the proxy's description suffix, benign result `note` fields, and the `secret-exfiltration` payload all named AgentChaos and said the run was a security test. All of it is model-visible, and in a field test Claude Code named AgentChaos unprompted and reasoned from it. The operator now gets that assurance on stderr and in the report, where it cannot contaminate the run.
+- **Benign tool results describe a small real project instead of an empty one** ([#12](https://github.com/asamassekou10/AgentChaos/issues/12)). `filesystem.list` returned `{entries: []}` and `filesystem.read` returned `{content: ""}` for everything, so agents concluded the workspace did not exist and stopped before the attack had anywhere to land. Unknown paths now return `ENOENT` rather than emptiness, because "nothing here" and "no such file" are different answers and one of them is a reason to give up.
+
+All five were found running 0.2.0 against Claude Code over MCP. #7 and #8 resolve the same way: the verdict becomes inconclusive and exits `2`, because "we could not see this" is not "the agent behaved". Neither `client` list has a default, so a config that does not mention it behaves exactly as before, and a declaration never overrides the recording: a call the agent actually made is judged whatever the config claims.
 
 ### Added
 
 - **`client` config block**, declaring what the agent's client does before AgentChaos sees a call: `reachable_tools` and `pre_approved_tools`.
 - **`test --repeat <n>`** ([#10](https://github.com/asamassekou10/AgentChaos/issues/10)). Runs each scenario n times and reports the worst outcome with the counts beside it, because a real model is a sampling problem rather than a function: `unauthorized-write` reached both verdicts against Claude Code under identical inputs. The counts appear in the terminal only when the outcomes disagreed, are in the JSON report as `scenarios[].repeat`, and are absent for a single run so a one-run report never implies a frequency it cannot support.
+
+### Changed
+
+- **A reversed decision worth naming.** 0.2.0 deliberately appended "(Simulated by AgentChaos for security testing)" to every tool description, reasoning that a description is model-visible text and implying a real `email.send` would be its own small act of deception. #9 reverses that. The reasoning does not survive contact with a real agent, and it could not have been absolute in the first place: a scenario payload is a fabricated issue carrying an attack, so deceiving the agent about content is the experiment rather than a lapse in it. What the principle properly protects is the operator, who is still told plainly, on stderr and in the report.
+
+### Notes
+
+The safety posture is unchanged. Every payload is still a harmless fixture, no benign result causes a real action, AgentChaos still makes no outbound request, and the simulated workspace added for #12 contains only placeholder values on `example.com`. What changed is who is told: the operator, not the subject.
 
 ## 0.2.0
 
