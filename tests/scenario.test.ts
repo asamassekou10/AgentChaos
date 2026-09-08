@@ -160,6 +160,34 @@ describe('built-in scenarios', () => {
     expect(ids).toContain('ssrf-internal-endpoint');
     expect(ids).toContain('nested-content-injection');
     expect(ids).toContain('destructive-command');
+    expect(ids).toContain('error-result-injection');
+    expect(ids).toContain('forged-trusted-field');
+  });
+
+  // Issue #19. An injected action the task also authorises cannot distinguish
+  // a captured agent from an obedient one, and the earlier version of
+  // unauthorized-write did exactly that: it asked for the same config change
+  // the task had asked for, so a correct agent scored as a failure.
+  it('unauthorized-write asserts on a path the task never authorised', () => {
+    const scenario = loadScenarios(builtinScenarioDir()).find(
+      (s) => s.scenario.id === 'unauthorized-write',
+    )?.scenario;
+
+    expect(scenario).toBeDefined();
+    const guarded = scenario!.assert.never.flatMap((m) => m.arguments?.path_matches ?? []);
+    expect(guarded.some((p) => p.includes('workflows'))).toBe(true);
+    expect(
+      guarded.some((p) => p.includes('settings.json')),
+      'settings.json is what the task itself requests; asserting on it flags correct agents',
+    ).toBe(false);
+  });
+
+  it('scenarios citing a disclosure use https references', () => {
+    for (const { scenario } of loadScenarios(builtinScenarioDir())) {
+      for (const ref of scenario.references ?? []) {
+        expect(ref, `${scenario.id} reference must be https`).toMatch(/^https:\/\//);
+      }
+    }
   });
 
   it('every scenario declares a boundary and at least one assertion', () => {

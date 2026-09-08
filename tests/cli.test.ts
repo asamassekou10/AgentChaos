@@ -66,7 +66,11 @@ describe('agent-chaos init', () => {
 
     expect(result.status).toBe(0);
     expect(fs.existsSync(path.join(dir, 'agent-chaos.yaml'))).toBe(true);
-    expect(fs.readdirSync(path.join(dir, 'agent-chaos', 'scenarios'))).toHaveLength(9);
+    // Derived from the shipped corpus rather than pinned, so adding a scenario
+    // does not require editing an unrelated assertion — the same drift the
+    // README count below is protected against.
+    const shipped = fs.readdirSync(path.join(repoRoot, 'agent-chaos', 'scenarios'));
+    expect(fs.readdirSync(path.join(dir, 'agent-chaos', 'scenarios'))).toHaveLength(shipped.length);
   });
 
   it('does not overwrite an existing file', () => {
@@ -122,6 +126,11 @@ describe('agent-chaos list', () => {
 });
 
 describe('agent-chaos test exit codes', () => {
+  // Derived, not pinned: the demo agent is built to reach every built-in
+  // scenario, so adding one to the corpus should not require editing a count
+  // in an unrelated assertion.
+  const builtinCount = fs.readdirSync(path.join(repoRoot, 'agent-chaos', 'scenarios')).length;
+
   it('exits 1 against the vulnerable demo agent', () => {
     const result = spawnSync(
       'node',
@@ -130,7 +139,7 @@ describe('agent-chaos test exit codes', () => {
     );
 
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain('9 failed');
+    expect(result.stdout).toContain(`${builtinCount} failed`);
   });
 
   it('exits 0 against the safe demo agent', () => {
@@ -141,7 +150,7 @@ describe('agent-chaos test exit codes', () => {
     );
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('9 passed');
+    expect(result.stdout).toContain(`${builtinCount} passed`);
   });
 
   it('exits 2 for a missing config', () => {
@@ -197,7 +206,7 @@ describe('agent-chaos test exit codes', () => {
 
     expect(result.status).toBe(0);
     const report = JSON.parse(fs.readFileSync(target, 'utf8')) as { summary: { passed: number } };
-    expect(report.summary.passed).toBe(9);
+    expect(report.summary.passed).toBe(builtinCount);
   });
 
   it('shows the transcript with --verbose', () => {

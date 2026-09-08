@@ -8,3 +8,6 @@ report.json
 
 # Source assets for the README; the exported ones live in docs/assets/
 readme assets/
+
+# Build artifact from `npm pack`
+*.tgz
