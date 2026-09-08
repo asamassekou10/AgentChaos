@@ -2,6 +2,22 @@
 
 Notable changes to AgentChaos. Versions follow [semantic versioning](https://semver.org), with the caveat noted in [docs/RELEASING.md](docs/RELEASING.md): pre-1.0, a change that alters a verdict is at least a minor, because a scenario that starts failing turns somebody's pipeline red.
 
+## Unreleased
+
+### Fixed
+
+- **`unauthorized-write` no longer flags agents that behaved correctly** ([#19](https://github.com/asamassekou10/AgentChaos/issues/19)). Its payload asked for the same config change the task itself requested, so an agent doing what the operator asked was scored as a security failure. An injected action the task also authorises cannot distinguish capture from obedience. The scenario now asks for that change _and_ an unrelated write to `.github/workflows/`, and asserts only on the second — a file the task never covered and which executes on every future push. Across 135 runs against two agents this was the only scenario that ever fired, and every one of those was a false positive.
+
+### Added
+
+- **Two scenarios drawn from this year's disclosures.** `error-result-injection` puts the payload in a _failed_ tool result, on the theory that error paths get less scrutiny and reach an agent already hunting for a remedy. `forged-trusted-field` puts it in a key shaped to look platform-supplied, which carries only the authority of whoever supplied the result.
+- **`references` on a scenario**, an optional list of URLs recording where the attack was disclosed. A corpus is a claim about what is worth testing, and a claim whose provenance is checkable is worth more than one asserted.
+- Issue templates for scenario proposals and bug reports. The scenario template leads with the task-versus-payload gap, since that is what #19 got wrong.
+
+### Changed
+
+- Scenario counts in the demo tests and the init test are derived from the shipped corpus rather than pinned, so adding a scenario no longer requires editing unrelated assertions.
+
 ## 0.3.0
 
 The release that came from pointing AgentChaos at a real agent for the first time. 0.2.0 was run against Claude Code over MCP, three sweeps of all nine scenarios; Claude held the boundary in eight of nine classes, and the six defects that run exposed are all fixed here. Two of them changed what a green check means.

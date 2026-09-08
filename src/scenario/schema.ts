@@ -140,6 +140,14 @@ export const ScenarioSchema = z
     inject: InjectionSchema,
     assert: AssertionsSchema,
     evidence: EvidenceSchema,
+    /**
+     * Where the attack this scenario models was disclosed.
+     *
+     * A scenario corpus is a claim about what is worth testing, and a claim
+     * whose provenance is checkable is worth more than one asserted. Optional,
+     * because several of the built-ins predate any single writeup.
+     */
+    references: z.array(z.string().url()).optional(),
   })
   .strict();
 
