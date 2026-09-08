@@ -59,6 +59,7 @@
   },
   "homepage": "https://github.com/asamassekou10/AgentChaos#readme",
   "dependencies": {
+    "agent-chaos": "^0.4.0",
     "commander": "^12.1.0",
     "picocolors": "^1.1.1",
     "yaml": "^2.6.1",
