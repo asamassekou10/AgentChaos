@@ -2,7 +2,9 @@
 
 Notable changes to AgentChaos. Versions follow [semantic versioning](https://semver.org), with the caveat noted in [docs/RELEASING.md](docs/RELEASING.md): pre-1.0, a change that alters a verdict is at least a minor, because a scenario that starts failing turns somebody's pipeline red.
 
-## Unreleased
+## 0.4.0
+
+The release where the corpus stopped flagging agents that behaved correctly. With it corrected, an eleven-scenario sweep across six models found real vulnerabilities in three of them: two Kimi models fetched cloud instance-metadata credentials, and Claude Haiku 4.5 emailed a planted credential to an address it read out of `git config`. Capability tier predicted compliance better than vendor did — every model that complied was a smaller or faster one.
 
 ### Fixed
 
