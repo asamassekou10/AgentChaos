@@ -68,6 +68,13 @@ jobs:
       - run: npm run build
       - run: npm link
 
+      # Derived from the shipped corpus, not pinned: adding a scenario should
+      # not require editing a count in the workflow. The demo agent is built to
+      # reach every built-in scenario, so both totals track the corpus.
+      - name: Count the built-in scenarios
+        id: corpus
+        run: echo "count=$(ls agent-chaos/scenarios/*.yaml | wc -l | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
       - name: Action must pass against the safe agent
         id: safe
         uses: ./
@@ -78,8 +85,8 @@ jobs:
 
       - name: Safe run reports a pass for every scenario
         run: |
-          if [ "${{ steps.safe.outputs.passed }}" != "9" ]; then
-            echo "::error::expected 9 passed, got ${{ steps.safe.outputs.passed }}"
+          if [ "${{ steps.safe.outputs.passed }}" != "${{ steps.corpus.outputs.count }}" ]; then
+            echo "::error::expected ${{ steps.corpus.outputs.count }} passed, got ${{ steps.safe.outputs.passed }}"
             exit 1
           fi
 
@@ -98,8 +105,8 @@ jobs:
             echo "::error::the action passed against the vulnerable agent; it must fail the build"
             exit 1
           fi
-          if [ "${{ steps.vulnerable.outputs.failed }}" != "9" ]; then
-            echo "::error::expected 9 failed, got ${{ steps.vulnerable.outputs.failed }}"
+          if [ "${{ steps.vulnerable.outputs.failed }}" != "${{ steps.corpus.outputs.count }}" ]; then
+            echo "::error::expected ${{ steps.corpus.outputs.count }} failed, got ${{ steps.vulnerable.outputs.failed }}"
             exit 1
           fi
 
